@@ -326,6 +326,7 @@ Orbit answers questions about the gateway in the console: press **Ask Orbit** or
 | `RELAYOPS_ORBIT_BASE_URL` | Chat completions base URL, e.g. `https://integrate.api.nvidia.com/v1`. Pointing it at a RelayOps AI route puts Orbit's own usage under your budgets and audit. |
 | `RELAYOPS_ORBIT_MODEL` | Model name, e.g. `meta/llama-3.3-70b-instruct` |
 | `RELAYOPS_ORBIT_API_KEY` | Sent as `Authorization: Bearer …` |
+| `RELAYOPS_ORBIT_FALLBACK_MODEL` | Optional. Answers when the main model is unknown, retired, overloaded or unreachable, using the same endpoint and key. Counted in `relayops_orbit_fallback_answers_total`. |
 
 Without a model, the console still shows Orbit with setup instructions, and `POST /api/orbit/ask` returns `503 orbit_not_configured`.
 
@@ -445,3 +446,7 @@ deploy/helm/         Helm chart;  examples/gitops/  sample document and workflow
 ## Roadmap
 
 SCIM provisioning · tenant-filtered live stream and dashboard tenant switcher · per-tenant gateway hostnames · gRPC and GraphQL routing · mTLS to upstreams and clients · request/response transformation · response caching · AI gateway policies (multi-provider routing, prompt guards) and an MCP tool gateway · Kubernetes operator and Terraform provider.
+
+## License
+
+RelayOps is licensed under the [Apache License, Version 2.0](LICENSE). See [NOTICE](NOTICE) for attributions.
