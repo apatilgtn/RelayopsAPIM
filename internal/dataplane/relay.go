@@ -47,7 +47,14 @@ type Relay struct {
 	upstreamSyncs  atomic.Int64
 	upstreamErrors atomic.Int64
 	served         atomic.Int64
+
+	authTTL atomic.Int64 // how long a verified credential is trusted, in ns
 }
+
+// SetAuthTTL changes how long a verified gateway credential is trusted
+// without asking the control plane again (default RelayAuthTTL). Safe to call
+// while the relay serves requests.
+func (rl *Relay) SetAuthTTL(d time.Duration) { rl.authTTL.Store(int64(d)) }
 
 var (
 	RelayAuthTTL      = 60 * time.Second
@@ -76,8 +83,10 @@ func NewRelay(ctx context.Context, upstream *Client) (*Relay, error) {
 	}
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	proxy.Transport = upstream.http.Transport
-	return &Relay{upstream: upstream, proxy: proxy, entries: map[string]*relayEntry{},
-		auth: map[[32]byte]relayAuth{}, ctx: ctx}, nil
+	rl := &Relay{upstream: upstream, proxy: proxy, entries: map[string]*relayEntry{},
+		auth: map[[32]byte]relayAuth{}, ctx: ctx}
+	rl.SetAuthTTL(RelayAuthTTL)
+	return rl, nil
 }
 
 func (rl *Relay) Handler() http.Handler {
@@ -109,7 +118,7 @@ func (rl *Relay) authenticate(r *http.Request) (string, int) {
 	rl.authMu.Lock()
 	cached, ok := rl.auth[key]
 	rl.authMu.Unlock()
-	if ok && time.Since(cached.verified) < RelayAuthTTL {
+	if ok && time.Since(cached.verified) < time.Duration(rl.authTTL.Load()) {
 		return cached.nodeID, 0
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)

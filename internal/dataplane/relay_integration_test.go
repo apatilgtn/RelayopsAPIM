@@ -132,9 +132,7 @@ func TestIntegrationRegionalRelay(t *testing.T) {
 
 	// Control plane unreachable: a recently verified gateway keeps getting
 	// configuration from the relay; an unknown one cannot be verified.
-	oldTTL := dataplane.RelayAuthTTL
-	dataplane.RelayAuthTTL = time.Millisecond
-	defer func() { dataplane.RelayAuthTTL = oldTTL }()
+	relay.SetAuthTTL(time.Millisecond)
 	cpDown.Store(true)
 	time.Sleep(5 * time.Millisecond)
 	if code := get(edgeTok, "edge-syd-1"); code != http.StatusOK {

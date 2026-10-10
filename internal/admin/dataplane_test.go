@@ -83,6 +83,8 @@ func TestDataplaneAPINotMountedWithoutToken(t *testing.T) {
 // seed puts a computed snapshot in the cache so the long-poll can be tested
 // without a database.
 func seed(s *Server, gen uint64, etag string) {
+	s.dataplane.cacheMu.Lock() // the long-poll reads the cache concurrently
+	defer s.dataplane.cacheMu.Unlock()
 	s.dataplane.cache["default|false"] = &dpEntry{gen: gen, at: time.Now(), etag: etag, raw: []byte(`{"fingerprint":"x"}`)}
 }
 
