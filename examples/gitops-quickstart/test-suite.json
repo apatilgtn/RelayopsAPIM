@@ -1,0 +1,36 @@
+{
+  "name": "Production Release Gate Verification",
+  "description": "Synthetic assertion suite executed before promoting canary revisions",
+  "base_url": "http://localhost:8080",
+  "timeout_seconds": 15,
+  "steps": [
+    {
+      "name": "Verify Public Weather Endpoint",
+      "method": "GET",
+      "path": "/weather/v1/forecast?latitude=-33.8688&longitude=151.2093&current=temperature_2m",
+      "assertions": [
+        { "type": "status_code", "operator": "equals", "value": "200" },
+        { "type": "response_time", "operator": "less_than", "value": "3000" },
+        { "type": "header", "target": "X-Request-Id", "operator": "exists" }
+      ]
+    },
+    {
+      "name": "Verify Orders Rejects Missing API Key",
+      "method": "GET",
+      "path": "/orders/status",
+      "assertions": [
+        { "type": "status_code", "operator": "equals", "value": "401" },
+        { "type": "header", "target": "X-Relayops-Decision-Reason", "operator": "equals", "value": "missing_api_key" }
+      ]
+    },
+    {
+      "name": "Verify Non-Existent Route Returns 404",
+      "method": "GET",
+      "path": "/unknown-service/ping",
+      "assertions": [
+        { "type": "status_code", "operator": "equals", "value": "404" },
+        { "type": "header", "target": "X-Relayops-Decision-Reason", "operator": "equals", "value": "no_route_matched" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  email {$ACME_EMAIL}
+}
+
+{$CONSOLE_DOMAIN} {
+  reverse_proxy relayops:9090 {
+    flush_interval -1
+  }
+}
+
+{$API_DOMAIN} {
+  reverse_proxy relayops:8080 {
+    flush_interval -1
+  }
+}

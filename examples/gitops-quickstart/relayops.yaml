@@ -1,0 +1,79 @@
+# =============================================================================
+# RelayOps APIM: Sample GitOps Declarative Configuration
+# Defines rate-limiting plans, REST microservices, and AI inference routes.
+# Validate:  relayopsctl validate -f relayops.yaml
+# Plan Diff: relayopsctl plan     -f relayops.yaml
+# Apply:     relayopsctl apply    -f relayops.yaml --auto-approve
+# =============================================================================
+
+format_version: "1.0"
+
+plans:
+  - name: developer
+    description: Free developer tier with token bucket rate limiting
+    rate_limit_per_minute: 60
+    quota_per_day: 5000
+    quota_per_month: 100000
+    price_monthly_usd: 0
+    tier: free
+
+  - name: enterprise
+    description: High-throughput production tier with priority allocation
+    rate_limit_per_minute: 1200
+    quota_per_day: 100000
+    quota_per_month: 2500000
+    price_monthly_usd: 299
+    tier: enterprise
+
+apis:
+  # ---------------------------------------------------------------------------
+  # 1. Public Weather Forecast API (Open-Meteo)
+  # ---------------------------------------------------------------------------
+  - name: Public Weather API
+    description: Global weather forecast powered by Open-Meteo
+    base_path: /weather
+    upstream_url: https://api.open-meteo.com
+    strip_path: true
+    auth_type: none
+    timeout_ms: 10000
+    enabled: true
+    visibility: public
+    rate_limit_per_minute: 60
+    traffic_policy:
+      retries:
+        attempts: 3
+        backoff_ms: 200
+
+  # ---------------------------------------------------------------------------
+  # 2. Key-Protected Orders Microservice (Mock Upstream)
+  # ---------------------------------------------------------------------------
+  - name: Orders Microservice
+    description: Secure order processing backend requiring API key authentication
+    base_path: /orders
+    upstream_url: http://localhost:7070
+    strip_path: false
+    auth_type: api_key
+    timeout_ms: 15000
+    enabled: true
+    visibility: public
+    require_approval: false
+    rate_limit_per_minute: 120
+    traffic_policy:
+      circuit_breaker:
+        failure_threshold: 5
+        open_seconds: 5
+
+  # ---------------------------------------------------------------------------
+  # 3. AI / LLM Streaming Inference Gateway
+  # ---------------------------------------------------------------------------
+  - name: AI Chat Completion Service
+    description: Streaming OpenAI/Anthropic proxy with token budgeting and fallback
+    base_path: /v1/chat
+    upstream_url: http://localhost:7070
+    strip_path: false
+    auth_type: api_key
+    timeout_ms: 30000
+    enabled: true
+    visibility: public
+    is_ai: true
+    rate_limit_per_minute: 60

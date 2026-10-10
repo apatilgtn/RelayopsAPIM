@@ -1,0 +1,5 @@
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY relayops relayopsctl mockupstream relayops-secrets /usr/local/bin/
+WORKDIR /home/nonroot
+EXPOSE 8080 9090
+ENTRYPOINT ["/usr/local/bin/relayops"]

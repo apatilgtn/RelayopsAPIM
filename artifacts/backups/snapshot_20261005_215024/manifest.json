@@ -1,0 +1,10 @@
+﻿{
+    "created_at":  "2026-10-05T21:50:24.6137072+11:00",
+    "version":  "1.0.0",
+    "counts":  {
+                   "consumers":  31,
+                   "subscriptions":  22,
+                   "plans":  10,
+                   "apis":  47
+               }
+}

@@ -1,0 +1,32 @@
+_format_version: "3.0"
+services:
+  - name: open
+    url: http://upstream:7070
+    routes:
+      - name: open
+        paths: [/open]
+        strip_path: true
+  - name: key
+    url: http://upstream:7070
+    routes:
+      - name: key
+        paths: [/key]
+        strip_path: true
+    plugins:
+      - name: key-auth
+        config:
+          key_names: [X-API-Key]
+      # Same limit semantics as the RelayOps and Tyk runs: a distributed
+      # (Redis) counter checked on every request, set high enough not to trip.
+      - name: rate-limiting
+        config:
+          minute: 100000000
+          policy: redis
+          redis:
+            host: redis
+            port: 6379
+            database: 4
+consumers:
+  - username: bench
+    keyauth_credentials:
+      - key: bench-key-0123456789abcdef

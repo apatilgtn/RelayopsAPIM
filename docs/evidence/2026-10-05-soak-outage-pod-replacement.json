@@ -1,0 +1,65 @@
+{
+  "started": "2026-10-05T14:43:07.9876936+11:00",
+  "duration_seconds": 600.0360088,
+  "target_rps": 300,
+  "gateways": [
+    "http://127.0.0.1:18080",
+    "http://127.0.0.1:18081"
+  ],
+  "requests": 180003,
+  "achieved_rps": 299.9869963804079,
+  "status": {
+    "200": 179977
+  },
+  "transport_errors": 26,
+  "error_rate_pct": 0.014444203707715984,
+  "latency_ms": {
+    "max": 40.672,
+    "p50": 0.653,
+    "p90": 1.936,
+    "p95": 2.252,
+    "p99": 3.588,
+    "p99.9": 7.583
+  },
+  "upstream_direct_latency_ms": {
+    "p50": 0,
+    "p99": 0.726
+  },
+  "requests_per_gateway": {
+    "http://127.0.0.1:18080": 90002,
+    "http://127.0.0.1:18081": 89975
+  },
+  "api_name": "soak-1791171786",
+  "api_base_path": "/soak-1791171786",
+  "publishes": 14,
+  "canaries": 13,
+  "promotions": 13,
+  "churn_failures": null,
+  "requests_served_by_canary": 15588,
+  "final_revision": 16,
+  "fleet_converged": true,
+  "sample_errors": [
+    "Get \"http://127.0.0.1:18081/soak-1791171786/echo\": dial tcp 127.0.0.1:18081: connectex: No connection could be made because the target machine actively refused it.",
+    "Get \"http://127.0.0.1:18081/soak-1791171786/echo\": dial tcp 127.0.0.1:18081: connectex: No connection could be made because the target machine actively refused it.",
+    "Get \"http://127.0.0.1:18081/soak-1791171786/echo\": dial tcp 127.0.0.1:18081: connectex: No connection could be made because the target machine actively refused it.",
+    "Get \"http://127.0.0.1:18081/soak-1791171786/echo\": dial tcp 127.0.0.1:18081: connectex: No connection could be made because the target machine actively refused it.",
+    "Get \"http://127.0.0.1:18081/soak-1791171786/echo\": dial tcp 127.0.0.1:18081: connectex: No connection could be made because the target machine actively refused it.",
+    "Get \"http://127.0.0.1:18081/soak-1791171786/echo\": dial tcp 127.0.0.1:18081: connectex: No connection could be made because the target machine actively refused it.",
+    "Get \"http://127.0.0.1:18081/soak-1791171786/echo\": dial tcp 127.0.0.1:18081: connectex: No connection could be made because the target machine actively refused it.",
+    "Get \"http://127.0.0.1:18081/soak-1791171786/echo\": dial tcp 127.0.0.1:18081: connectex: No connection could be made because the target machine actively refused it.",
+    "Get \"http://127.0.0.1:18081/soak-1791171786/echo\": dial tcp 127.0.0.1:18081: connectex: No connection could be made because the target machine actively refused it.",
+    "Get \"http://127.0.0.1:18081/soak-1791171786/echo\": dial tcp 127.0.0.1:18081: connectex: No connection could be made because the target machine actively refused it.",
+    "Get \"http://127.0.0.1:18081/soak-1791171786/echo\": dial tcp 127.0.0.1:18081: connectex: No connection could be made because the target machine actively refused it.",
+    "Get \"http://127.0.0.1:18081/soak-1791171786/echo\": dial tcp 127.0.0.1:18081: connectex: No connection could be made because the target machine actively refused it.",
+    "Get \"http://127.0.0.1:18081/soak-1791171786/echo\": dial tcp 127.0.0.1:18081: connectex: No connection could be made because the target machine actively refused it.",
+    "Get \"http://127.0.0.1:18081/soak-1791171786/echo\": dial tcp 127.0.0.1:18081: connectex: No connection could be made because the target machine actively refused it.",
+    "Get \"http://127.0.0.1:18081/soak-1791171786/echo\": dial tcp 127.0.0.1:18081: connectex: No connection could be made because the target machine actively refused it.",
+    "Get \"http://127.0.0.1:18081/soak-1791171786/echo\": dial tcp 127.0.0.1:18081: connectex: No connection could be made because the target machine actively refused it.",
+    "Get \"http://127.0.0.1:18081/soak-1791171786/echo\": dial tcp 127.0.0.1:18081: connectex: No connection could be made because the target machine actively refused it.",
+    "Get \"http://127.0.0.1:18081/soak-1791171786/echo\": dial tcp 127.0.0.1:18081: connectex: No connection could be made because the target machine actively refused it.",
+    "Get \"http://127.0.0.1:18081/soak-1791171786/echo\": dial tcp 127.0.0.1:18081: connectex: No connection could be made because the target machine actively refused it.",
+    "Get \"http://127.0.0.1:18081/soak-1791171786/echo\": dial tcp 127.0.0.1:18081: connectex: No connection could be made because the target machine actively refused it."
+  ],
+  "pass": true,
+  "failed_checks": null
+}

@@ -1,0 +1,10 @@
+{
+  "name": "key",
+  "api_id": "key",
+  "org_id": "default",
+  "use_keyless": false,
+  "auth": { "auth_header_name": "X-API-Key" },
+  "active": true,
+  "version_data": { "not_versioned": true, "versions": { "Default": { "name": "Default" } } },
+  "proxy": { "listen_path": "/key/", "target_url": "http://upstream:7070/", "strip_listen_path": true }
+}

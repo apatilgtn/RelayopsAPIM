@@ -1,0 +1,68 @@
+name: relayops
+services:
+  relayops:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: relayops:local
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      RELAYOPS_REDIS_URL: redis://redis:6379/0
+      RELAYOPS_ADMIN_ADDR: ':9090'
+      RELAYOPS_PROXY_ADDR: ':8080'
+      RELAYOPS_NODE_ID: aws-primary-01
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - ./data:/home/nonroot/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: [redis-server, --appendonly, 'yes']
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    logging:
+      options:
+        max-size: 10m
+        max-file: '3'
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      CONSOLE_DOMAIN: ${CONSOLE_DOMAIN:?Set CONSOLE_DOMAIN}
+      API_DOMAIN: ${API_DOMAIN:?Set API_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL}
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [relayops]
+    logging:
+      options:
+        max-size: 10m
+        max-file: '3'
+volumes:
+  redis_data:
+  caddy_data:
+  caddy_config:

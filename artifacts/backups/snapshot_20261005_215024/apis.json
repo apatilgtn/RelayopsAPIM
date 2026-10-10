@@ -1,0 +1,1365 @@
+﻿[
+    {
+        "id":  "be8bbbae-45d3-451b-af49-60681e7509d8",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "dead",
+        "description":  "",
+        "base_path":  "/dead",
+        "upstream_url":  "http://localhost:7999",
+        "strip_path":  true,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T15:26:20.940351+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "b36b1c38-54a2-4a5a-8686-e7677861b80e",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "Debug API 022465e0-8a60-4fec-bfe8-e21f026c6e77",
+        "description":  "",
+        "base_path":  "/debug-14acdae8",
+        "upstream_url":  "http://127.0.0.1:7070",
+        "strip_path":  true,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T23:17:17.822335+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "f185d34f-baf9-4c06-8643-ef26239693f1",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "Debug API 2529b2b9-dfec-4ab2-910b-0f9bfaf0a4aa",
+        "description":  "",
+        "base_path":  "/debug-9257ed9c",
+        "upstream_url":  "http://127.0.0.1:7070",
+        "strip_path":  true,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T23:15:22.889864+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "0cca844a-76fd-419d-bee1-ff07f5c73fe5",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "Declarative GitOps API",
+        "description":  "Deployed via declarative apply",
+        "base_path":  "/gitops-service",
+        "upstream_url":  "http://127.0.0.1:7070/anything",
+        "strip_path":  false,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T23:07:35.110634+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "cd5fe539-5107-4e41-b424-ddef2f6d686f",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "demo",
+        "description":  "open demo API",
+        "base_path":  "/demo",
+        "upstream_url":  "http://localhost:7070",
+        "strip_path":  true,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T15:26:17.704998+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "63ed68e4-0feb-4df0-ac6d-8cf615642f35",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "Experimental Canary API-0d4479a6",
+        "description":  "Canary candidate service",
+        "base_path":  "/canary-0d4479a6",
+        "upstream_url":  "http://127.0.0.1:7070/anything",
+        "strip_path":  true,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T23:19:27.822588+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "529bf72c-ece7-4c45-9d8c-e67e1b0d9dc1",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "Experimental Canary API-34402453",
+        "description":  "Canary candidate service",
+        "base_path":  "/canary-34402453",
+        "upstream_url":  "http://127.0.0.1:7070/anything",
+        "strip_path":  true,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T23:25:05.186623+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "0c9922b7-5692-404c-946d-527ea9a6c44c",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "Experimental Canary API-4e29bf5c",
+        "description":  "Canary candidate service",
+        "base_path":  "/canary-4e29bf5c",
+        "upstream_url":  "http://127.0.0.1:7070/anything",
+        "strip_path":  true,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T23:17:39.427008+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "ebba02eb-00f3-4bcf-876a-d3abaaad12a2",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "Experimental Canary API-5d9d78e2",
+        "description":  "Canary candidate service",
+        "base_path":  "/canary-5d9d78e2",
+        "upstream_url":  "http://127.0.0.1:7070/anything",
+        "strip_path":  true,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T23:14:52.109205+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "e0e13429-29ac-4b0a-8d48-a3bb3274300d",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "Experimental Canary API-78086a2f",
+        "description":  "Canary candidate service",
+        "base_path":  "/canary-78086a2f",
+        "upstream_url":  "http://127.0.0.1:7070/anything",
+        "strip_path":  true,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T23:23:38.051061+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "bc633de6-71dd-4f8f-b582-61c22d73eca4",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "Experimental Canary API-83d13326",
+        "description":  "Canary candidate service",
+        "base_path":  "/canary-83d13326",
+        "upstream_url":  "http://127.0.0.1:7070/anything",
+        "strip_path":  true,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T23:18:21.023295+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "d4d00902-dd0e-4582-bc60-61d5e6facafe",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "Experimental Canary API-d618b125",
+        "description":  "Canary candidate service",
+        "base_path":  "/canary-d618b125",
+        "upstream_url":  "http://127.0.0.1:7070/anything",
+        "strip_path":  true,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T23:18:52.6422+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "fea2b608-db60-495d-a293-6733b3cbe214",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "Experimental v2 Canary API",
+        "description":  "Canary candidate service",
+        "base_path":  "/canary-candidate-v2",
+        "upstream_url":  "http://127.0.0.1:7070/anything",
+        "strip_path":  true,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T23:12:13.020769+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "4b386ddc-f08b-4a5d-9c5c-8ed211589d80",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "Faulty Test Service-26833321",
+        "description":  "Service with invalid upstream triggering 502/504 errors",
+        "base_path":  "/faulty-26833321",
+        "upstream_url":  "http://127.0.0.1:59999/bad-port",
+        "strip_path":  true,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  500,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T23:17:41.251486+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "ffc10653-aead-433a-9cb6-3fc3ba28b352",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "Faulty Test Service-45b281e8",
+        "description":  "Service with invalid upstream triggering 502/504 errors",
+        "base_path":  "/faulty-45b281e8",
+        "upstream_url":  "http://127.0.0.1:59999/bad-port",
+        "strip_path":  true,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  500,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  true,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T23:23:39.909359+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "dedab8c5-dd66-463f-90c2-748f5e9188b3",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "Faulty Test Service-4b977873",
+        "description":  "Service with invalid upstream triggering 502/504 errors",
+        "base_path":  "/faulty-4b977873",
+        "upstream_url":  "http://127.0.0.1:59999/bad-port",
+        "strip_path":  true,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  500,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  true,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T23:25:06.949979+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "3e4e7441-7511-42f6-91fa-a7784dfb1906",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "Faulty Test Service-7e6f0744",
+        "description":  "Service with invalid upstream triggering 502/504 errors",
+        "base_path":  "/faulty-7e6f0744",
+        "upstream_url":  "http://127.0.0.1:59999/bad-port",
+        "strip_path":  true,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  500,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T23:18:54.45797+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "0b44575a-4862-4070-b96d-fde5b4c4dfb8",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "Faulty Test Service-b64c9c9c",
+        "description":  "Service with invalid upstream triggering 502/504 errors",
+        "base_path":  "/faulty-b64c9c9c",
+        "upstream_url":  "http://127.0.0.1:59999/bad-port",
+        "strip_path":  true,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  500,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  true,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T23:19:29.634389+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "293e93cf-f5ea-4e19-8ff9-f8f36f594b59",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "Faulty Test Service-bcde1367",
+        "description":  "Service with invalid upstream triggering 502/504 errors",
+        "base_path":  "/faulty-bcde1367",
+        "upstream_url":  "http://127.0.0.1:59999/bad-port",
+        "strip_path":  true,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  500,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T23:18:22.818323+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "48ffcff3-88fd-4448-a061-9c9d049e9799",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "impact-guidance-406532",
+        "description":  "",
+        "base_path":  "/ig-0bbc40",
+        "upstream_url":  "http://127.0.0.1:7070",
+        "strip_path":  true,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T22:36:10.258146+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "eecf7124-fe5d-4d0b-acc8-7b835c662910",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "impact-guidance-71cfd3",
+        "description":  "",
+        "base_path":  "/ig-4e62f5",
+        "upstream_url":  "http://127.0.0.1:7070",
+        "strip_path":  true,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T22:35:29.350901+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "d1434691-d143-4e69-8bc3-a6170e5c2b79",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "impact-guidance-84b72a",
+        "description":  "",
+        "base_path":  "/ig-61c923",
+        "upstream_url":  "http://127.0.0.1:7070",
+        "strip_path":  true,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T23:19:49.737077+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "d5881640-aec0-42c2-99c4-a2cd325990c1",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "impact-guidance-a0ed7e",
+        "description":  "",
+        "base_path":  "/ig-5967ca",
+        "upstream_url":  "http://127.0.0.1:7070",
+        "strip_path":  true,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T22:36:36.958805+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "ee504330-7735-436b-a3ec-d8cfa96c648e",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "impact-guidance-a277ba",
+        "description":  "",
+        "base_path":  "/ig-bafea9",
+        "upstream_url":  "http://127.0.0.1:7070",
+        "strip_path":  true,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T22:36:55.438989+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "b3526e06-c9ce-4c2c-ba32-422481373f76",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "impact-guidance-d0a321",
+        "description":  "",
+        "base_path":  "/ig-648899",
+        "upstream_url":  "http://127.0.0.1:7070",
+        "strip_path":  true,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T23:25:19.488858+11:00",
+        "updated_at":  "2026-10-04T23:25:19.488858+11:00"
+    },
+    {
+        "id":  "8a27586a-3a60-4378-bca0-6ea9f06e51d0",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "impact-guidance-f6b326",
+        "description":  "",
+        "base_path":  "/ig-a42e6f",
+        "upstream_url":  "http://127.0.0.1:7070",
+        "strip_path":  true,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T22:34:49.873392+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "fbc529fc-9fc4-4911-b6d2-5a2afaeba2c5",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "nvidia-nim",
+        "description":  "NVIDIA NIM AI Models (Llama 3.1, Mistral, Nemotron) with secret injection \u0026 streaming token tracking",
+        "base_path":  "/ai/nvidia",
+        "upstream_url":  "https://integrate.api.nvidia.com/v1",
+        "strip_path":  true,
+        "auth_type":  "api_key",
+        "rate_limit_per_minute":  60,
+        "quota_per_day":  500,
+        "quota_per_month":  10000,
+        "timeout_ms":  120000,
+        "cors_enabled":  true,
+        "request_headers":  {
+                                "Authorization":  "Bearer ${secret:NVIDIA_API_KEY}"
+                            },
+        "is_ai":  true,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T12:58:40.607054+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "e0aeecc0-fe87-496a-a8fb-31e94b7a9ce4",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "orders",
+        "description":  "",
+        "base_path":  "/orders",
+        "upstream_url":  "http://localhost:7070/v1",
+        "strip_path":  true,
+        "auth_type":  "api_key",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+                                "X-Env":  "test"
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T15:26:18.111735+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "efd28ec3-ce2c-403d-bbd1-10612ac7055f",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "parity-api-dad395",
+        "description":  "",
+        "base_path":  "/parity-bf922d",
+        "upstream_url":  "http://localhost:7070",
+        "strip_path":  true,
+        "auth_type":  "api_key",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T20:08:06.903356+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "29aa1422-649b-448a-906e-0450f2f82305",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "parity-api-ea0f93",
+        "description":  "",
+        "base_path":  "/parity-780705",
+        "upstream_url":  "http://localhost:7070",
+        "strip_path":  true,
+        "auth_type":  "api_key",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T20:09:33.855211+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "0a83b478-6d36-481f-bfe0-8f50b0f37890",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "parity-api-ffd34d",
+        "description":  "",
+        "base_path":  "/parity-df6a55",
+        "upstream_url":  "http://localhost:7070",
+        "strip_path":  true,
+        "auth_type":  "api_key",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T20:05:21.886098+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "fa789e82-323d-4d90-aa32-1d13d7fecbb3",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "quota-test-00a7b6",
+        "description":  "",
+        "base_path":  "/quota-test-f95474",
+        "upstream_url":  "http://localhost:7070",
+        "strip_path":  true,
+        "auth_type":  "api_key",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T21:57:03.634752+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "ad537a09-da85-4d38-8c79-ada36f97c0c3",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "quota-test-4e43d4",
+        "description":  "",
+        "base_path":  "/quota-test-618957",
+        "upstream_url":  "http://localhost:7070",
+        "strip_path":  true,
+        "auth_type":  "api_key",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T21:52:14.87111+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "06fea6a0-837a-4b54-8a49-9d53ab3eb228",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "quota-test-68a393",
+        "description":  "",
+        "base_path":  "/quota-test-5485f3",
+        "upstream_url":  "http://localhost:7070",
+        "strip_path":  true,
+        "auth_type":  "api_key",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T21:56:33.068437+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "b019d8c9-cc15-4be7-a9ed-3411a08e4261",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "quota-test-766b4b",
+        "description":  "",
+        "base_path":  "/quota-test-490878",
+        "upstream_url":  "http://localhost:7070",
+        "strip_path":  true,
+        "auth_type":  "api_key",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T21:55:22.066369+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "65788275-ac42-480e-ab1f-6f550eb637a0",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "rollback-test-api-13041d",
+        "description":  "",
+        "base_path":  "/rollback-test-00eea9",
+        "upstream_url":  "http://localhost:7070",
+        "strip_path":  true,
+        "auth_type":  "api_key",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T18:45:49.277809+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "06dcfe76-2a1c-4e50-99bb-4adfd1b1a0dd",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "rollback-test-api-39d3ed",
+        "description":  "",
+        "base_path":  "/rollback-test-cc6099",
+        "upstream_url":  "http://localhost:7070",
+        "strip_path":  true,
+        "auth_type":  "api_key",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T18:46:21.988001+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "897b2fe4-f16a-4556-a527-8059eac331db",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "rollback-test-api-40d1b6",
+        "description":  "",
+        "base_path":  "/rollback-test-818d66",
+        "upstream_url":  "http://localhost:7070",
+        "strip_path":  true,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  false,
+        "created_at":  "2026-10-04T18:38:52.284863+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "3c29744e-f81f-4bac-9cca-5473560e9aeb",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "rollback-test-api-4d87ce",
+        "description":  "",
+        "base_path":  "/rollback-test-ff1384",
+        "upstream_url":  "http://localhost:7070",
+        "strip_path":  true,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T18:43:59.52261+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "fb26a25f-c984-43dd-aa2a-688685da9037",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "rollback-test-api-5390bf",
+        "description":  "",
+        "base_path":  "/rollback-test-a3d497",
+        "upstream_url":  "http://localhost:7070",
+        "strip_path":  true,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  false,
+        "created_at":  "2026-10-04T18:32:04.57528+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "0243e2a1-2433-470c-a0d4-c2230fa6261e",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "rollback-test-api-5c5aa6",
+        "description":  "",
+        "base_path":  "/rollback-test-1cfc38",
+        "upstream_url":  "http://localhost:7070",
+        "strip_path":  true,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  false,
+        "created_at":  "2026-10-04T18:27:24.638241+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "0b6a7588-ec94-4f36-8fbf-1e45633606a7",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "rollback-test-api-7420ef",
+        "description":  "",
+        "base_path":  "/rollback-test-a3eba8",
+        "upstream_url":  "http://localhost:7070",
+        "strip_path":  true,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  false,
+        "created_at":  "2026-10-04T18:30:35.23766+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "d0416adf-2abc-4c6e-8e00-e0caac701850",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "rollback-test-api-968fad",
+        "description":  "",
+        "base_path":  "/rollback-test-5afa0f",
+        "upstream_url":  "http://localhost:7070",
+        "strip_path":  true,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  false,
+        "created_at":  "2026-10-04T17:41:23.978627+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "52734fcd-3869-4dd9-a51f-b1871a8d4a11",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "rollback-test-api-e0fd51",
+        "description":  "",
+        "base_path":  "/rollback-test-51b8fb",
+        "upstream_url":  "http://localhost:7070",
+        "strip_path":  true,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  false,
+        "created_at":  "2026-10-04T18:36:30.802431+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "60a83d48-db8f-4844-bf7a-b009801b4d3e",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "rollback-test-api-f7e9be",
+        "description":  "",
+        "base_path":  "/rollback-test-683168",
+        "upstream_url":  "http://localhost:7070",
+        "strip_path":  true,
+        "auth_type":  "api_key",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T18:45:22.141358+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "7a69aade-118f-4280-bc36-10cc1e926283",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "rollback-test-api-f86450",
+        "description":  "",
+        "base_path":  "/rollback-test-d0699c",
+        "upstream_url":  "http://localhost:7070",
+        "strip_path":  true,
+        "auth_type":  "api_key",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  30000,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T18:41:29.48595+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    },
+    {
+        "id":  "50bdf6a2-c2cd-42c6-8ada-284a9b602e07",
+        "tenant_id":  "00000000-0000-0000-0000-000000000def",
+        "name":  "slow",
+        "description":  "",
+        "base_path":  "/slow",
+        "upstream_url":  "http://localhost:7070",
+        "strip_path":  true,
+        "auth_type":  "none",
+        "rate_limit_per_minute":  0,
+        "quota_per_day":  0,
+        "quota_per_month":  0,
+        "timeout_ms":  300,
+        "cors_enabled":  false,
+        "request_headers":  {
+
+                            },
+        "is_ai":  false,
+        "visibility":  "public",
+        "require_approval":  false,
+        "is_draft":  false,
+        "quota_failure_policy":  "fail_open",
+        "traffic_policy":  {
+
+                           },
+        "enabled":  true,
+        "created_at":  "2026-10-04T15:26:20.938493+11:00",
+        "updated_at":  "2026-10-04T23:25:09.804537+11:00"
+    }
+]

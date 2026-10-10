@@ -1,0 +1,28 @@
+{{- if and (include "relayops.split" .) .Values.controlPlane.leaderElection }}
+# Leader election for the auto-rollback supervisor: Leases only, this namespace only.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "relayops.fullname" . }}-leader-election
+  labels:
+    {{- include "relayops.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "create", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "relayops.fullname" . }}-leader-election
+  labels:
+    {{- include "relayops.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "relayops.fullname" . }}-leader-election
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "relayops.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

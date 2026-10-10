@@ -1,0 +1,16 @@
+bin/
+*.exe
+.env
+.env.*
+!.env.example
+!.env.storage.example
+tools/
+*.log
+data/
+
+# WASM plugin build output (plugins/wasm/build.sh)
+plugins/wasm/dist/
+
+# Benchmark harness build output and results
+deploy/bench/.build/
+deploy/bench/results/

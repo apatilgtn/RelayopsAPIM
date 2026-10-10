@@ -1,0 +1,62 @@
+name: real-api-e2e
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: Open-Meteo whole-product E2E
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 2s --health-timeout 5s --health-retries 30
+    env:
+      RELAYOPS_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+      RELAYOPS_ADMIN_TOKEN: e2e-admin
+      RELAYOPS_ADMIN_ADDR: ":9090"
+      RELAYOPS_PROXY_ADDR: ":8080"
+      RELAYOPS_REDIS_URL: none
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - name: Build
+        run: go build -o bin/ ./cmd/relayops ./cmd/relayopsctl
+      - name: Start RelayOps
+        run: |
+          ./bin/relayops &
+          echo $! > /tmp/relayops.pid
+          for i in $(seq 1 40); do
+            if curl -fsS -H "Authorization: Bearer e2e-admin" http://127.0.0.1:9090/healthz >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "control plane did not become ready"
+          exit 1
+      - name: Install PowerShell
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq wget apt-transport-https software-properties-common
+          wget -q https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb
+          sudo dpkg -i packages-microsoft-prod.deb
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq powershell
+      - name: Run whole-product E2E
+        run: pwsh -File scripts/e2e_real_product.ps1 -AdminToken e2e-admin
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-real-product
+          path: artifacts/e2e-real-product.json

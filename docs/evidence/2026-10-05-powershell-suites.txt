@@ -1,0 +1,8 @@
+﻿e2e.ps1                                       exit=0 
+test_release1.ps1                             exit=0 
+test_advanced_features.ps1                    exit=0 
+test_enterprise_readiness.ps1                 exit=0 
+test_enterprise_platform.ps1                  exit=0 
+test_milestone_safety_and_decisions.ps1       exit=0 [PASS] Provider verification and unconfigured JWKS strictly fail closed!
+test_complete_workflows_and_safety.ps1        exit=0 
+test_platform_resilience.ps1                  exit=0 

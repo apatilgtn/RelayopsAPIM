@@ -1,0 +1,46 @@
+# RelayOps declarative configuration (format_version 1.0).
+# APIs and plans are matched by name. Unknown fields are rejected.
+# Secrets are never exported; reference them as ${secret:NAME}, resolved from the
+# control plane's environment (RELAYOPS_SECRET_NAME or NAME).
+format_version: "1.0"
+
+plans:
+  - name: free
+    description: Evaluation tier
+    rate_limit_per_minute: 60
+    quota_per_day: 1000
+  - name: gold
+    description: Production tier
+    rate_limit_per_minute: 1200
+    quota_per_month: 5000000
+
+apis:
+  - name: orders
+    description: Order management
+    base_path: /orders
+    upstream_url: http://orders.internal:8080/v1
+    auth_type: api_key
+    timeout_ms: 5000
+    rate_limit_per_minute: 600
+    traffic_policy:
+      load_balancing: least_requests
+      targets:
+        - url: http://orders-a.internal:8080/v1
+        - url: http://orders-b.internal:8080/v1
+        - url: http://orders-c.internal:8080/v1
+          weight: 0            # drained for maintenance
+      retries:
+        attempts: 3            # first try + 2 retries, idempotent methods only
+        backoff_ms: 25
+      circuit_breaker:
+        failure_threshold: 5   # consecutive 502/503/504 or connection failures
+        open_seconds: 30
+      health_check:
+        path: /healthz
+        interval_seconds: 10
+
+  - name: billing
+    base_path: /billing
+    upstream_url: http://billing.internal:8080
+    auth_type: jwt
+    jwt_secret: ${secret:BILLING_JWT_SECRET}

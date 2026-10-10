@@ -1,0 +1,23 @@
+RelayOps {{ .Chart.AppVersion }} is deployed as release "{{ .Release.Name }}".
+
+Gateway (data plane):
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "relayops.fullname" . }}-proxy 8080:{{ .Values.service.proxyPort }}
+
+Control plane, dashboard and developer portal:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "relayops.fullname" . }}-admin 9090:{{ .Values.service.adminPort }}
+  open http://localhost:9090  (portal: /portal, metrics: /metrics)
+{{- if not .Values.adminToken.existingSecret }}
+
+Admin token:
+  kubectl -n {{ .Release.Namespace }} get secret {{ include "relayops.secretName" . }} -o jsonpath='{.data.admin-token}' | base64 -d
+{{- end }}
+
+Manage configuration as code (relayopsctl ships in the image):
+  export RELAYOPS_URL=http://localhost:9090 RELAYOPS_TOKEN=<admin token>
+  relayopsctl export -o relayops.yaml
+  relayopsctl plan -f relayops.yaml
+  relayopsctl apply -f relayops.yaml --canary --traffic-percent 10
+{{- if not .Values.redis.url }}
+
+Note: redis.url is not set, so rate limits and quotas are enforced per node.
+{{- end }}

@@ -1,0 +1,85 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Unit, integration and failure tests (Postgres + Redis)
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 2s --health-timeout 5s --health-retries 30
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+    env:
+      RELAYOPS_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+      # Integration tests fail instead of skipping when the database is missing.
+      RELAYOPS_REQUIRE_INTEGRATION: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - name: PostgreSQL client tools (backup/restore test)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-16
+          echo "/usr/lib/postgresql/16/bin" >> "$GITHUB_PATH"
+      - name: Formatting
+        run: |
+          unformatted="$(gofmt -l cmd internal web)"
+          if [ -n "$unformatted" ]; then echo "::error::gofmt needed:"; echo "$unformatted"; exit 1; fi
+      - name: Vet
+        run: go vet ./...
+      - name: Tests with race detector (unit, Postgres integration, multi-node failure, upgrade, backup/restore)
+        run: go test -race -count=1 -json ./... | tee test-results.json | go run ./internal/tools/testsummary
+      - name: Synthetic Test Gates (Testing Studio)
+        run: |
+          go run ./cmd/relayopsctl test validate -f examples/test-studio/open-meteo.suite.json
+          go run ./cmd/relayopsctl test validate -f examples/test-studio/open-meteo-keyed.suite.json
+          go test -race -v -run TestIntegrationStudioLiveRunner ./internal/testingstudio
+      - name: Dashboard scripts
+        run: |
+          node --check web/static/app.js
+          node --check web/static/test-studio.js
+          node web/analytics.test.cjs
+          node web/canary.test.cjs
+          node web/test-studio.test.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: test-results.json
+
+  package:
+    name: Container image and Helm chart
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t relayops:ci .
+      - name: Image contains the server and CLI
+        run: |
+          docker run --rm --entrypoint /usr/local/bin/relayopsctl relayops:ci help >/dev/null
+      - uses: azure/setup-helm@v4
+      - name: Lint and render chart (HPA and PDB validated)
+        run: |
+          helm lint deploy/helm/relayops --set database.url=postgres://x@db/relayops
+          helm template ci deploy/helm/relayops --set database.url=postgres://x@db/relayops \
+            --set canary.enabled=true --set serviceMonitor.enabled=true \
+            --set gateway.autoscaling.enabled=true --set gateway.podDisruptionBudget.enabled=true >/dev/null
+          helm template ci deploy/helm/relayops --set database.url=postgres://x@db/relayops \
+            --set persistence.enabled=true --set gateway.autoscaling.enabled=true \
+            --set gateway.podDisruptionBudget.enabled=true >/dev/null

@@ -1,0 +1,76 @@
+# Proxy traffic goes to every gateway node (stable and dedicated canary nodes alike).
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "relayops.fullname" . }}-proxy
+  labels:
+    {{- include "relayops.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "relayops.selectorLabels" . | nindent 4 }}
+    relayops.io/serves-proxy: "true"
+  ports:
+    - name: proxy
+      port: {{ .Values.service.proxyPort }}
+      targetPort: proxy
+      protocol: TCP
+---
+# The control-plane API, dashboard, portal, node API and /metrics: stable nodes in
+# combined mode, control-plane pods in split mode.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "relayops.fullname" . }}-admin
+  labels:
+    {{- include "relayops.labels" . | nindent 4 }}
+    app.kubernetes.io/component: admin
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "relayops.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: {{ ternary "control-plane" "gateway" (eq (include "relayops.split" .) "true") }}
+  ports:
+    - name: admin
+      port: {{ .Values.service.adminPort }}
+      targetPort: admin
+      protocol: TCP
+{{- if .Values.persistence.enabled }}
+---
+# Headless service that gives StatefulSet gateway pods stable identities.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "relayops.fullname" . }}-nodes
+  labels:
+    {{- include "relayops.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  selector:
+    {{- include "relayops.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway
+  ports:
+    - {name: proxy, port: {{ .Values.service.proxyPort }}, targetPort: proxy}
+{{- end }}
+{{- if include "relayops.split" . }}
+---
+# Gateway-only pods expose /metrics, /healthz and /readyz on a status port.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "relayops.fullname" . }}-gateway-status
+  labels:
+    {{- include "relayops.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway-status
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "relayops.selectorLabels" . | nindent 4 }}
+    relayops.io/serves-proxy: "true"
+  ports:
+    - {name: status, port: 9091, targetPort: status, protocol: TCP}
+{{- end }}

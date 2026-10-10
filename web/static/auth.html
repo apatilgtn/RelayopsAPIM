@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Sign in to RelayOps or request access to your team's API control plane.">
+  <title>Sign in · RelayOps</title>
+  <link rel="stylesheet" href="/auth.css">
+  <style>.brand-sub{white-space:nowrap}</style>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23c4f36b'/%3E%3Cpath d='M10 23V9h7a4 4 0 010 8h-7m6 0 6 6' fill='none' stroke='%23132022' stroke-width='3'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/design-system.css">
+  <script src="/ui.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#auth-main">Skip to sign in</a>
+  <div class="auth-shell">
+    <section class="entry">
+      <header class="entry-header"><a class="brand" href="/login" aria-label="RelayOps sign in"><span class="brand-symbol" aria-hidden="true">R<span></span></span>RelayOps<span class="brand-sub">API MANAGEMENT</span></a><a class="hub-link" href="/portal">Developer Hub <span aria-hidden="true"></span></a></header>
+      <main id="auth-main" class="form-wrap">
+        <div class="eyebrow"><span></span> Workspace access</div>
+        <h1 id="form-title">Sign in to RelayOps</h1>
+        <p class="intro" id="form-intro">Access your API workspace.</p>
+        <nav class="mode-tabs" aria-label="Account access"><a id="login-tab" href="/login" aria-current="page">Sign in</a><a id="signup-tab" href="/signup">Request access</a></nav>
+        <div id="form-message" class="message" role="status" aria-live="polite" hidden></div>
+        <form id="auth-form">
+          <div class="signup-only" hidden><label for="full-name">Full name</label><input id="full-name" name="name" autocomplete="name" placeholder="Alex Morgan" maxlength="120"></div>
+          <div id="email-field"><label for="email">Work email</label><input id="email" name="email" type="email" autocomplete="username" placeholder="you@company.com" maxlength="254" required></div>
+          <div class="signup-only" hidden><label for="team">Team or organization</label><input id="team" name="team" autocomplete="organization" placeholder="Platform Engineering" maxlength="120"></div>
+          <div id="password-field"><div class="label-row"><label for="password">Password</label><span id="password-help">Your workspace password</span></div><div class="password-wrap"><input id="password" name="password" type="password" autocomplete="current-password" placeholder="Enter your password" required><button id="show-password" type="button" aria-label="Show password" aria-pressed="false">Show</button></div><p class="field-note signup-only" hidden>Use at least 12 characters. Access requires team approval.</p></div>
+          <div id="token-field" hidden><label for="admin-token">Administrator token</label><div class="password-wrap"><input id="admin-token" type="password" autocomplete="off" placeholder="Enter your administrator token"></div><p class="field-note">This field accepts a platform token. To use your account password, choose “Use email and password instead”.</p></div>
+          <button class="submit" id="submit" type="submit"><span>Sign in to RelayOps</span><span data-icon="arrow-right"></span></button>
+          <p class="approval-note signup-only" hidden>Creating an account requests access to this installation. Your administrator approves access and assigns your role.</p>
+        </form>
+        <div id="login-options"><div class="divider"><span>Administrator access</span></div><button class="token-button" id="token-mode" type="button"><span aria-hidden="true"></span> Use an administrator token</button><p class="help-line">Need a password reset? Contact your workspace administrator.</p></div>
+        <div id="success-actions" hidden><a class="success-link" href="/login">Back to sign in </a><a href="/portal">Explore the Developer Hub </a></div>
+      </main>
+      <footer class="entry-footer"><span>© <span id="year">2026</span> RelayOps</span><span>Built for the teams behind the APIs.</span></footer>
+    </section>
+    <aside class="story" aria-label="About RelayOps">
+      <div class="story-top"><span class="pill"><span></span> SAFE, VISIBLE API OPERATIONS</span><span class="edition">THE RELAYOPS CONTROL PLANE</span></div>
+      <div class="story-content"><h2>Release changes<br>with <em>confidence.</em></h2><p class="story-description">Understand change impact, release gradually and investigate every request in one workspace.</p>
+        <div class="signal-card" aria-label="Illustration of an API request decision">
+          <div class="signal-head"><span><i></i> REQUEST DECISION</span><span class="illustration-label">ILLUSTRATION</span></div>
+          <div class="request"><span class="method">GET</span><code>/payments/v1/transactions</code><span class="allowed">Allowed </span></div>
+          <div class="flow"><div><span class="flow-icon" data-icon="shield-check"></span><strong>Identity</strong><small>Verified</small></div><span class="flow-line"></span><div><span class="flow-icon" data-icon="shield-check"></span><strong>Policy</strong><small>Passed</small></div><span class="flow-line"></span><div><span class="flow-icon" data-icon="server"></span><strong>Upstream</strong><small>Connected</small></div></div>
+          <div class="signal-bottom"><span><span class="dot"></span> Every decision has a reason.</span><span class="mono">Request insight</span></div>
+        </div>
+        <div class="story-points"><div><span>01</span><p><strong>See what happened.</strong> Explore request decisions in context.</p></div><div><span>02</span><p><strong>Know what changes.</strong> Review impact before publishing.</p></div><div><span>03</span><p><strong>Build together.</strong> Bring APIs and developers into one workspace.</p></div></div>
+      </div>
+      <div class="story-footer"><span>LESS GUESSWORK. MORE CLARITY.</span><span aria-hidden="true"></span></div>
+    </aside>
+  </div>
+  <script src="/auth.js" defer></script>
+</body>
+</html>

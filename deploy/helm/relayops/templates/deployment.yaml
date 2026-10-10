@@ -1,0 +1,87 @@
+{{- $split := include "relayops.split" . }}
+{{- $edgeMode := ternary "gateway" "combined" (eq $split "true") }}
+{{- $persistent := .Values.persistence.enabled }}
+apiVersion: apps/v1
+kind: {{ ternary "StatefulSet" "Deployment" $persistent }}
+metadata:
+  name: {{ include "relayops.fullname" . }}
+  labels:
+    {{- include "relayops.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway
+spec:
+  {{- if not .Values.gateway.autoscaling.enabled }}
+  replicas: {{ .Values.gateway.replicas }}
+  {{- end }}
+  revisionHistoryLimit: 5
+  {{- if $persistent }}
+  serviceName: {{ include "relayops.fullname" . }}-nodes
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+  {{- else }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxUnavailable: 0, maxSurge: 1}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "relayops.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: gateway
+  template:
+    {{- include "relayops.podTemplate" (dict "root" . "role" "gateway" "mode" $edgeMode "group" .Values.gateway.nodeGroup "canary" false "resources" .Values.gateway.resources "persistent" $persistent) | nindent 4 }}
+  {{- if $persistent }}
+  volumeClaimTemplates:
+    - metadata:
+        name: config-cache
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with .Values.persistence.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size }}
+  {{- end }}
+{{- if .Values.canary.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "relayops.fullname" . }}-canary
+  labels:
+    {{- include "relayops.labels" . | nindent 4 }}
+    app.kubernetes.io/component: canary
+spec:
+  replicas: {{ .Values.canary.replicas }}
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      {{- include "relayops.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: canary
+  template:
+    {{- include "relayops.podTemplate" (dict "root" . "role" "canary" "mode" $edgeMode "group" .Values.canary.nodeGroup "canary" true "resources" .Values.canary.resources "persistent" false) | nindent 4 }}
+{{- end }}
+{{- if $split }}
+---
+# Control plane for split mode: admin API, console, portal, node API, auto-rollback
+# supervisor and Test Studio. The only pods that hold the database DSN.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "relayops.fullname" . }}-control-plane
+  labels:
+    {{- include "relayops.labels" . | nindent 4 }}
+    app.kubernetes.io/component: control-plane
+spec:
+  replicas: {{ .Values.controlPlane.replicas }}
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxUnavailable: 0, maxSurge: 1}
+  selector:
+    matchLabels:
+      {{- include "relayops.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: control-plane
+  template:
+    {{- include "relayops.podTemplate" (dict "root" . "role" "control-plane" "mode" "control-plane" "group" "control-plane" "canary" false "resources" .Values.controlPlane.resources "persistent" false) | nindent 4 }}
+{{- end }}

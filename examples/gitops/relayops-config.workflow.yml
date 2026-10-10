@@ -1,0 +1,86 @@
+# Example GitOps workflow for a repository that holds RelayOps configuration.
+# Copy to .github/workflows/relayops-config.yml in that repository.
+#
+#   Pull request -> plan (diff, consumer impact, traffic replay) posted as a PR comment
+#   Merge to main -> apply as a 10% canary, watch it, then promote
+#
+# Required secrets: RELAYOPS_URL, RELAYOPS_TOKEN.
+# Replace OWNER/RelayOpsAPIM@main with the repository and ref that contain the action.
+name: relayops-config
+
+on:
+  pull_request:
+    paths: ["relayops.yaml"]
+  push:
+    branches: [main]
+    paths: ["relayops.yaml"]
+
+concurrency:
+  group: relayops-config
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: OWNER/RelayOpsAPIM/.github/actions/relayops-config@main
+        with:
+          command: plan
+          file: relayops.yaml
+          server: ${{ secrets.RELAYOPS_URL }}
+          token: ${{ secrets.RELAYOPS_TOKEN }}
+          fail-on-replay-changes: "false"
+
+  deploy:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: production   # add required reviewers here for a manual gate
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: plan
+        uses: OWNER/RelayOpsAPIM/.github/actions/relayops-config@main
+        with:
+          command: plan
+          file: relayops.yaml
+          server: ${{ secrets.RELAYOPS_URL }}
+          token: ${{ secrets.RELAYOPS_TOKEN }}
+          comment-on-pr: "false"
+
+      - id: apply
+        if: steps.plan.outputs.has-changes == 'true'
+        uses: OWNER/RelayOpsAPIM/.github/actions/relayops-config@main
+        with:
+          command: apply
+          file: relayops.yaml
+          server: ${{ secrets.RELAYOPS_URL }}
+          token: ${{ secrets.RELAYOPS_TOKEN }}
+          plan-hash: ${{ steps.plan.outputs.plan-hash }}
+          canary: "true"
+          traffic-percent: "10"
+
+      # The control plane's auto-rollback supervisor aborts the canary on its own if
+      # its error rate breaches the configured threshold. Promote only if it survived.
+      - name: Bake and promote
+        if: steps.apply.outputs.revision != '' && steps.apply.outputs.revision != '0'
+        env:
+          RELAYOPS_URL: ${{ secrets.RELAYOPS_URL }}
+          RELAYOPS_TOKEN: ${{ secrets.RELAYOPS_TOKEN }}
+          REV: ${{ steps.apply.outputs.revision }}
+        run: |
+          set -euo pipefail
+          sleep 300
+          "$RUNNER_TEMP/relayopsctl" rollout status
+          status="$(curl -fsS -H "Authorization: Bearer $RELAYOPS_TOKEN" "$RELAYOPS_URL/api/revisions/$REV" | jq -r .status)"
+          if [ "$status" != "canary" ]; then
+            echo "::error::Canary rev_$REV is '$status' (auto-rollback withdrew it); not promoting"
+            exit 1
+          fi
+          "$RUNNER_TEMP/relayopsctl" rollout promote "$REV"

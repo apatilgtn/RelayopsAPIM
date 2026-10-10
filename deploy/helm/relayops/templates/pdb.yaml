@@ -1,0 +1,43 @@
+{{- if .Values.gateway.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "relayops.fullname" . }}
+  labels:
+    {{- include "relayops.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway
+spec:
+  {{- if .Values.gateway.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.gateway.podDisruptionBudget.minAvailable }}
+  {{- else if .Values.gateway.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.gateway.podDisruptionBudget.maxUnavailable }}
+  {{- else }}
+  minAvailable: 1
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "relayops.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: gateway
+{{- end }}
+{{- if and .Values.canary.enabled .Values.canary.podDisruptionBudget .Values.canary.podDisruptionBudget.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "relayops.fullname" . }}-canary
+  labels:
+    {{- include "relayops.labels" . | nindent 4 }}
+    app.kubernetes.io/component: canary
+spec:
+  {{- if .Values.canary.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.canary.podDisruptionBudget.minAvailable }}
+  {{- else if .Values.canary.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.canary.podDisruptionBudget.maxUnavailable }}
+  {{- else }}
+  minAvailable: 1
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "relayops.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: canary
+{{- end }}

@@ -1,0 +1,168 @@
+name: RelayOps configuration
+description: >
+  Plan or apply a RelayOps declarative configuration. Plans include field-level
+  diffs, consumer impact and a replay of recent production traffic, and are
+  written to the job summary and (optionally) posted on the pull request.
+  Apply pins the reviewed plan hash, so it refuses to run if the document or
+  the live configuration changed since the plan.
+
+inputs:
+  command:
+    description: "plan or apply"
+    required: true
+  file:
+    description: "Path to the declarative document (JSON or YAML)"
+    required: true
+  server:
+    description: "RelayOps control-plane URL, e.g. https://relayops-admin.example.com"
+    required: true
+  token:
+    description: "Admin bearer token (pass a secret)"
+    required: true
+  tenant:
+    description: "Tenant slug to plan and apply in (multi-tenant control planes)"
+    required: false
+    default: ""
+  prune:
+    description: "Delete APIs and plans the document does not declare"
+    required: false
+    default: "false"
+  plan-hash:
+    description: "apply: plan hash from a reviewed plan; apply is refused if it no longer matches"
+    required: false
+    default: ""
+  canary:
+    description: "apply: publish as an in-flight canary instead of fleet-wide"
+    required: false
+    default: "false"
+  traffic-percent:
+    description: "apply with canary: share of traffic routed to the canary on every node"
+    required: false
+    default: "0"
+  canary-header:
+    description: "apply with canary: requests carrying this header always go to the canary"
+    required: false
+    default: ""
+  comment-on-pr:
+    description: "plan: post the plan as a pull request comment (needs pull-requests: write and github-token)"
+    required: false
+    default: "true"
+  fail-on-replay-changes:
+    description: "plan: fail when replaying recent traffic shows requests that would get a different status"
+    required: false
+    default: "false"
+  github-token:
+    description: "Token used to comment on the pull request"
+    required: false
+    default: ${{ github.token }}
+  go-version:
+    description: "Go toolchain used to build relayopsctl"
+    required: false
+    default: "1.22"
+
+outputs:
+  has-changes:
+    description: "true when the plan contains creates, updates or deletes"
+    value: ${{ steps.plan.outputs.has-changes }}
+  plan-hash:
+    description: "Hash of the reviewed plan; pass it to apply"
+    value: ${{ steps.plan.outputs.plan-hash }}
+  revision:
+    description: "Revision created by apply (0 when there was nothing to apply)"
+    value: ${{ steps.apply.outputs.revision }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v5
+      with:
+        go-version: ${{ inputs.go-version }}
+        cache: false
+
+    - name: Build relayopsctl
+      shell: bash
+      run: |
+        set -euo pipefail
+        repo_root="$(cd "$GITHUB_ACTION_PATH/../../.." && pwd)"
+        (cd "$repo_root" && go build -o "$RUNNER_TEMP/relayopsctl" ./cmd/relayopsctl)
+        "$RUNNER_TEMP/relayopsctl" help >/dev/null
+
+    - name: Plan
+      id: plan
+      if: inputs.command == 'plan'
+      shell: bash
+      env:
+        RELAYOPS_URL: ${{ inputs.server }}
+        RELAYOPS_TOKEN: ${{ inputs.token }}
+        RELAYOPS_TENANT: ${{ inputs.tenant }}
+        FILE: ${{ inputs.file }}
+        PRUNE: ${{ inputs.prune }}
+        FAIL_ON_REPLAY: ${{ inputs.fail-on-replay-changes }}
+      run: |
+        set -uo pipefail
+        args=(plan -f "$FILE" --output markdown --detailed-exitcode --save-plan "$RUNNER_TEMP/plan.json")
+        [ "$PRUNE" = "true" ] && args+=(--prune)
+        "$RUNNER_TEMP/relayopsctl" "${args[@]}" > "$RUNNER_TEMP/plan.md"
+        code=$?
+        cat "$RUNNER_TEMP/plan.md" >> "$GITHUB_STEP_SUMMARY"
+        cat "$RUNNER_TEMP/plan.md"
+        if [ "$code" = "1" ]; then
+          echo "::error::RelayOps plan failed; see the job summary"
+          exit 1
+        fi
+        echo "has-changes=$([ "$code" = "2" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+        hash="$(jq -r '.plan_hash // ""' "$RUNNER_TEMP/plan.json")"
+        echo "plan-hash=$hash" >> "$GITHUB_OUTPUT"
+        if [ "$FAIL_ON_REPLAY" = "true" ]; then
+          changed="$(jq '[.changes[]? | .replay.status_changed // 0] | add // 0' "$RUNNER_TEMP/plan.json")"
+          if [ "$changed" -gt 0 ]; then
+            echo "::error::Replaying recent traffic shows $changed request(s) that would get a different status"
+            exit 1
+          fi
+        fi
+
+    - name: Comment plan on pull request
+      if: inputs.command == 'plan' && inputs.comment-on-pr == 'true' && github.event_name == 'pull_request'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        PR: ${{ github.event.pull_request.number }}
+      run: |
+        set -euo pipefail
+        body="$RUNNER_TEMP/plan-comment.md"
+        { echo "<!-- relayops-plan -->"; cat "$RUNNER_TEMP/plan.md"; } > "$body"
+        gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file "$body" --edit-last 2>/dev/null \
+          || gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file "$body"
+
+    - name: Apply
+      id: apply
+      if: inputs.command == 'apply'
+      shell: bash
+      env:
+        RELAYOPS_URL: ${{ inputs.server }}
+        RELAYOPS_TOKEN: ${{ inputs.token }}
+        RELAYOPS_TENANT: ${{ inputs.tenant }}
+        FILE: ${{ inputs.file }}
+        PRUNE: ${{ inputs.prune }}
+        PLAN_HASH: ${{ inputs.plan-hash }}
+        CANARY: ${{ inputs.canary }}
+        TRAFFIC_PERCENT: ${{ inputs.traffic-percent }}
+        CANARY_HEADER: ${{ inputs.canary-header }}
+      run: |
+        set -euo pipefail
+        args=(apply -f "$FILE" --auto-approve --output json)
+        [ "$PRUNE" = "true" ] && args+=(--prune)
+        [ -n "$PLAN_HASH" ] && args+=(--plan-hash "$PLAN_HASH")
+        if [ "$CANARY" = "true" ]; then
+          args+=(--canary --traffic-percent "$TRAFFIC_PERCENT")
+          [ -n "$CANARY_HEADER" ] && args+=(--canary-header "$CANARY_HEADER")
+        fi
+        "$RUNNER_TEMP/relayopsctl" "${args[@]}" > "$RUNNER_TEMP/apply.json"
+        cat "$RUNNER_TEMP/apply.json"
+        rev="$(jq -r '.revision // 0' "$RUNNER_TEMP/apply.json")"
+        echo "revision=$rev" >> "$GITHUB_OUTPUT"
+        {
+          echo "### RelayOps apply"
+          echo
+          jq -r '.message // "No changes."' "$RUNNER_TEMP/apply.json"
+        } >> "$GITHUB_STEP_SUMMARY"

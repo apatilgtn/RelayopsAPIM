@@ -1,0 +1,62 @@
+# High-availability layout on one host (stage 1): a control plane and two
+# gateway-only nodes behind Caddy. A gateway can crash or be redeployed
+# without dropping traffic, and gateways keep serving their last config if
+# the control plane is down. A host failure still takes everything down; see
+# docs/AWS_SUPABASE_DEPLOYMENT.md (stage 2) for two hosts behind a load
+# balancer.
+#
+#   docker compose -f compose.yaml -f compose.ha.yaml up -d
+#   ./rolling-update.sh            # replace gateways one at a time
+#
+# Needs RELAYOPS_DATAPLANE_TOKEN (32+ characters) in .env.
+name: relayops
+services:
+  # The combined node becomes the control plane: console, admin API, node
+  # API, rollouts. It no longer serves API traffic.
+  relayops:
+    environment:
+      RELAYOPS_ROLE: control-plane
+      RELAYOPS_STATUS_ADDR: ':9091'
+      # Test Studio, AI evaluations and the MCP workbench call APIs through
+      # a gateway; the control plane has no proxy of its own.
+      RELAYOPS_GATEWAY_URL: http://gateway-a:8080
+      RELAYOPS_DATAPLANE_TOKEN: ${RELAYOPS_DATAPLANE_TOKEN:?Set RELAYOPS_DATAPLANE_TOKEN in .env}
+
+  gateway-a: &gateway
+    image: relayops:local
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    environment: &gateway-env
+      RELAYOPS_ROLE: gateway
+      RELAYOPS_CONTROL_PLANE_URL: http://relayops:9090
+      RELAYOPS_DATAPLANE_ALLOW_HTTP: 'true' # private Docker network only
+      RELAYOPS_DATAPLANE_TOKEN: ${RELAYOPS_DATAPLANE_TOKEN:?Set RELAYOPS_DATAPLANE_TOKEN in .env}
+      RELAYOPS_REDIS_URL: redis://redis:6379/0
+      RELAYOPS_PROXY_ADDR: ':8080'
+      RELAYOPS_STATUS_ADDR: ':9091'
+      RELAYOPS_NODE_ID: aws-gateway-a
+      RELAYOPS_LOG_SAMPLE_RATE: ${RELAYOPS_LOG_SAMPLE_RATE:-1}
+      RELAYOPS_WASM_PLUGINS_DIR: ${RELAYOPS_WASM_PLUGINS_DIR:-}
+    volumes:
+      - ./data/gateway-a:/home/nonroot/data # last-known-good config and log spool
+    depends_on: [relayops, redis]
+    security_opt: [no-new-privileges:true]
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: '3' }
+
+  gateway-b:
+    <<: *gateway
+    environment:
+      <<: *gateway-env
+      RELAYOPS_NODE_ID: aws-gateway-b
+    volumes:
+      - ./data/gateway-b:/home/nonroot/data
+
+  caddy:
+    volumes:
+      - ./Caddyfile.ha:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [relayops, gateway-a, gateway-b]

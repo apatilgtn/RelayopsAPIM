@@ -1,0 +1,47 @@
+# Breaking candidate: the public weather API now requires a key.
+# Used to prove comparison failure and a blocked promote, then discarded.
+format_version: "1.0"
+
+plans:
+  - name: weather-demo
+    description: Tight demo plan so quota and rate-limit evidence is easy to produce
+    rate_limit_per_minute: 8
+    quota_per_day: 200
+    quota_per_month: 4000
+    price_monthly_usd: 0
+    tier: free
+
+apis:
+  - name: Open-Meteo weather demo
+    description: Public path now requires a key — this is the breaking candidate
+    base_path: /weather-demo
+    upstream_url: https://api.open-meteo.com
+    strip_path: true
+    auth_type: api_key
+    timeout_ms: 15000
+    enabled: true
+    visibility: public
+    rate_limit_per_minute: 30
+
+  - name: Open-Meteo weather keyed
+    description: Same forecast behind a RelayOps API key and plan
+    base_path: /weather-keyed
+    upstream_url: https://api.open-meteo.com
+    strip_path: true
+    auth_type: api_key
+    timeout_ms: 15000
+    enabled: true
+    visibility: public
+    require_approval: false
+    rate_limit_per_minute: 8
+
+  - name: Open-Meteo weather jwt
+    description: Same forecast behind a RelayOps HS256 JWT
+    base_path: /weather-jwt
+    upstream_url: https://api.open-meteo.com
+    strip_path: true
+    auth_type: jwt
+    jwt_secret: weather-e2e-hs256-secret
+    timeout_ms: 15000
+    enabled: true
+    visibility: public

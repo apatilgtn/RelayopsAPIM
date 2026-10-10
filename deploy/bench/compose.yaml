@@ -1,0 +1,75 @@
+# Same-host gateway comparison: RelayOps, Kong (DB-less) and Tyk OSS behind
+# identical policies, one gateway running at a time. See README.md.
+#
+# CPU sets keep the pieces from competing: the gateway under test gets
+# cores 0-3, the upstream 4-5, Redis 6, PostgreSQL 7, the load generator 8+.
+# Adjust GATEWAY_CPUS etc. in the environment for other machines.
+
+name: relaybench
+
+x-gateway: &gateway
+  cpuset: ${GATEWAY_CPUS:-0-3}
+  depends_on: [redis, upstream]
+  profiles: [gateway]
+
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    cpuset: ${REDIS_CPUS:-6}
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: bench
+      POSTGRES_DB: relayops
+    cpuset: ${POSTGRES_CPUS:-7}
+
+  upstream:
+    build: .
+    image: relaybench-tools
+    entrypoint: ["/usr/local/bin/mockupstream", "-addr", ":7070", "-jitter-ms", "0"]
+    cpuset: ${UPSTREAM_CPUS:-4-5}
+
+  relayops:
+    <<: *gateway
+    image: relaybench-tools
+    entrypoint: ["/usr/local/bin/relayops"]
+    depends_on: [redis, upstream, postgres]
+    environment:
+      RELAYOPS_DATABASE_URL: postgres://postgres:bench@postgres:5432/relayops?sslmode=disable
+      RELAYOPS_REDIS_URL: redis://redis:6379/2
+      RELAYOPS_ADMIN_TOKEN: bench-admin-token
+      RELAYOPS_PROXY_ADDR: ":8080"
+      RELAYOPS_ADMIN_ADDR: ":9090"
+      RELAYOPS_NODE_ID: bench-relayops
+      RELAYOPS_LOG_SAMPLE_RATE: ${RELAYOPS_LOG_SAMPLE_RATE:-1}
+    ports: ["127.0.0.1:19090:9090"]
+
+  kong:
+    <<: *gateway
+    image: kong:3.9
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /kong/kong.yml
+      KONG_PROXY_LISTEN: 0.0.0.0:8080
+      KONG_ADMIN_LISTEN: "off"
+      KONG_PROXY_ACCESS_LOG: "off"
+      KONG_NGINX_WORKER_PROCESSES: "4"
+    volumes: ["./kong:/kong:ro"]
+
+  tyk:
+    <<: *gateway
+    image: tykio/tyk-gateway:v5.8.1
+    volumes:
+      - ./tyk/tyk.conf:/opt/tyk-gateway/tyk.conf:ro
+      - ./tyk/apps:/opt/tyk-gateway/apps:ro
+    environment:
+      TYK_GW_SECRET: bench-tyk-secret
+
+  bench:
+    image: relaybench-tools
+    entrypoint: ["/usr/local/bin/bench"]
+    cpuset: ${BENCH_CPUS:-8-15}
+    volumes: ["./results:/results"]
+    profiles: [tools]

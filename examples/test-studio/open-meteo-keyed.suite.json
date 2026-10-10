@@ -1,0 +1,30 @@
+{
+  "name": "Open-Meteo keyed API verification",
+  "description": "Proves RelayOps API-key auth in front of the real Open-Meteo API. The environment supplies {{api_key}}.",
+  "requests": [
+    {
+      "id": "forecast-unauthorized",
+      "name": "Keyed path without a credential",
+      "method": "GET",
+      "path": "/weather-keyed/v1/forecast",
+      "query_params": { "latitude": "-33.8688", "longitude": "151.2093", "current": "temperature_2m", "forecast_days": "1" },
+      "assertions": [
+        { "type": "status_code", "expected": "401" },
+        { "type": "response_time_ms", "expected": "10000" }
+      ]
+    },
+    {
+      "id": "forecast-authorized",
+      "name": "Keyed path with a subscribed API key",
+      "method": "GET",
+      "path": "/weather-keyed/v1/forecast",
+      "query_params": { "latitude": "-33.8688", "longitude": "151.2093", "current": "temperature_2m", "forecast_days": "1" },
+      "auth": { "type": "api_key", "token_value": "{{api_key}}" },
+      "assertions": [
+        { "type": "status_code", "expected": "200" },
+        { "type": "json_path_exists", "target": "/current/temperature_2m", "expected": "" },
+        { "type": "response_time_ms", "expected": "10000" }
+      ]
+    }
+  ]
+}

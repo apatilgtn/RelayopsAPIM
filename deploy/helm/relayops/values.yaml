@@ -1,0 +1,191 @@
+# Default values for the RelayOps chart.
+
+image:
+  repository: ghcr.io/relayops/relayops
+  tag: ""            # defaults to the chart appVersion
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# PostgreSQL is required. Provide either a DSN or an existing secret holding one.
+database:
+  url: ""                      # postgres://user:pass@host:5432/relayops?sslmode=require
+  existingSecret: ""           # secret name containing the DSN
+  existingSecretKey: database-url
+
+# Redis enables cluster-wide rate limits and quotas (optional; in-memory otherwise).
+redis:
+  url: ""                      # redis://redis-master:6379/0
+
+# Admin bearer token for the control-plane API. Leave empty to have the chart
+# generate one (kept across upgrades), or point at an existing secret.
+adminToken:
+  value: ""
+  existingSecret: ""
+  existingSecretKey: admin-token
+
+# Dedicated HS256 signing secret for SSO identity tokens (>= 32 bytes). Leave
+# empty to disable HS256 SSO and use registered OIDC providers only.
+ssoSecret:
+  value: ""
+  existingSecret: ""
+  existingSecretKey: sso-secret
+
+# Values exposed to ${secret:NAME} references in API headers and jwt_secret.
+# Each key becomes RELAYOPS_SECRET_<KEY>. Prefer extraEnvFrom with your own secret.
+apiSecrets: {}
+
+logRetentionHours: 72
+
+# Request logs that cannot be written to PostgreSQL (outage) are spooled to the
+# pod's data volume and replayed when the database returns. The volume is an
+# emptyDir: it survives container restarts but not pod deletion. 0 disables.
+logSpoolMB: 256
+
+# Fraction (0-1] of successful requests written to request_logs. Errors are
+# always kept; kept rows carry a weight so analytics and automatic rollback
+# still count every request. 0.05 cuts log writes about 20x at high traffic.
+logSampleRate: "1"
+
+# "otlp" sends every request log (before sampling) to tracing.endpoint as OTLP
+# log records, so analytics can live in Loki/Elastic/Datadog while PostgreSQL
+# keeps only the sampled rows auto-rollback and the console need.
+logExport: ""
+
+# Persist each stable gateway's data directory (request-log spool and
+# last-known-good config) across pod replacement. When enabled, stable gateways
+# run as a StatefulSet: pod names, which are the node IDs, stay the same, so a
+# replaced pod finds and delivers the spool its predecessor left behind.
+persistence:
+  enabled: false
+  size: 1Gi
+  storageClassName: ""
+resyncSeconds: 300
+
+# OpenTelemetry tracing (OTLP/HTTP). Empty endpoint disables export; incoming
+# traceparent headers are still forwarded and recorded.
+tracing:
+  endpoint: ""                 # http://otel-collector.observability:4318
+  serviceName: relayops-gateway
+  sampleRatio: "1.0"
+  headers: ""                  # comma-separated key=value pairs
+
+# Deployment topology.
+#   combined: every gateway node also runs the control plane and connects to
+#             PostgreSQL (LISTEN/NOTIFY keeps nodes in sync). Default.
+#   split:    gateway (and canary) pods run RELAYOPS_ROLE=gateway: no database DSN,
+#             admin token or console; they pull configuration from dedicated
+#             control-plane pods over the node API, and expose /metrics, /healthz
+#             and /readyz on :9091. Only control-plane pods hold the database DSN.
+mode: combined
+
+# Control-plane pods (split mode only).
+controlPlane:
+  replicas: 2
+  # One replica, chosen through a Kubernetes Lease, runs the auto-rollback
+  # supervisor; the others send it no database queries. Adds a Role limited
+  # to Leases and mounts the service-account token on control-plane pods only.
+  leaderElection: false
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {memory: 512Mi}
+
+# Node API between gateway-only pods and the control plane (split mode only).
+dataplane:
+  # Shared node token (>= 32 characters). Leave empty to generate one (kept
+  # across upgrades), or point at an existing secret.
+  token:
+    value: ""
+    existingSecret: ""
+    existingSecretKey: dataplane-token
+  # Defaults to the in-cluster admin service over plain HTTP. For gateways
+  # outside the cluster, or without a mesh providing mTLS, use an https URL
+  # and set allowHTTP: false.
+  controlPlaneURL: ""
+  allowHTTP: true
+  # Signed configuration. Generate a pair with `relayops dataplane-keygen`, put
+  # the signing key in a Secret, and list the public key(s) in verifyKeys
+  # (comma-separated; list old and new keys while rotating). Gateways with
+  # verifyKeys refuse unsigned or untrusted configuration and verify their
+  # on-disk cache before a cold start.
+  signingKey:
+    existingSecret: ""
+    existingSecretKey: signing-key
+  verifyKeys: ""
+
+# Stable gateway nodes. In combined mode every node serves traffic on :8080 and
+# the control-plane API on :9090; in split mode they serve traffic only.
+gateway:
+  replicas: 2
+  nodeGroup: default
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {memory: 512Mi}
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+  podAnnotations: {}
+
+# Optional dedicated canary nodes (RELAYOPS_CANARY=true). They serve an in-flight
+# canary revision for 100% of their traffic. Percentage and header canaries run on
+# every node and do not need this.
+canary:
+  enabled: false
+  replicas: 1
+  nodeGroup: canary
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {memory: 512Mi}
+
+service:
+  type: ClusterIP
+  proxyPort: 8080
+  adminPort: 9090
+  annotations: {}
+
+ingress:
+  proxy:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts: []                  # - host: api.example.com
+    tls: []
+  admin:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts: []                  # - host: relayops-admin.example.com
+    tls: []
+
+serviceMonitor:
+  enabled: false               # requires the Prometheus Operator CRDs
+  interval: 30s
+  labels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile: {type: RuntimeDefault}
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities: {drop: [ALL]}
+
+extraEnv: []
+extraEnvFrom: []
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}

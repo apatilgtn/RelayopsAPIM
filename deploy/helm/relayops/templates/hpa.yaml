@@ -1,0 +1,74 @@
+{{- if .Values.gateway.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "relayops.fullname" . }}
+  labels:
+    {{- include "relayops.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: {{ ternary "StatefulSet" "Deployment" .Values.persistence.enabled }}
+    name: {{ include "relayops.fullname" . }}
+  minReplicas: {{ .Values.gateway.autoscaling.minReplicas | default 2 }}
+  maxReplicas: {{ .Values.gateway.autoscaling.maxReplicas | default 10 }}
+  metrics:
+    {{- if .Values.gateway.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.gateway.autoscaling.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if .Values.gateway.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.gateway.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- end }}
+    {{- with .Values.gateway.autoscaling.customMetrics }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.gateway.autoscaling.behavior }}
+  behavior:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}
+{{- if and .Values.canary.enabled .Values.canary.autoscaling .Values.canary.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "relayops.fullname" . }}-canary
+  labels:
+    {{- include "relayops.labels" . | nindent 4 }}
+    app.kubernetes.io/component: canary
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "relayops.fullname" . }}-canary
+  minReplicas: {{ .Values.canary.autoscaling.minReplicas | default 1 }}
+  maxReplicas: {{ .Values.canary.autoscaling.maxReplicas | default 5 }}
+  metrics:
+    {{- if .Values.canary.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.canary.autoscaling.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if .Values.canary.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.canary.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- end }}
+{{- end }}

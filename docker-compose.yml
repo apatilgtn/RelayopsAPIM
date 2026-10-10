@@ -1,0 +1,87 @@
+# =============================================================================
+# RelayOps APIM: Turnkey Local Stack
+# Start with one command: docker compose up -d
+#
+# Access Points:
+#   - Control Plane (Console & Test Studio): http://localhost:9090
+#   - Developer Hub & API Workbench:         http://localhost:9090/portal
+#   - Reverse Proxy & API Gateway:           http://localhost:8080
+#   - Mock Upstream & LLM Streamer:          http://localhost:7070
+#   - Prometheus Metrics:                    http://localhost:9090/metrics
+#
+# Split deployment, a gateway node without database access
+# (see docs/DATAPLANE_SEPARATION_DESIGN_2026-10-09.md):
+#   RELAYOPS_DATAPLANE_TOKEN=<32+ chars> docker compose --profile split up -d
+#   - Gateway-only node:                     http://localhost:8081
+#   - Its /metrics, /healthz and /readyz:    http://localhost:9091
+# =============================================================================
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: relayops
+      POSTGRES_PASSWORD: relayops
+      POSTGRES_DB: relayops
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U relayops -d relayops"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  gateway:
+    image: ghcr.io/relayops/relayops:latest
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      RELAYOPS_DATABASE_URL: postgres://relayops:relayops@postgres:5432/relayops?sslmode=disable
+      RELAYOPS_ADMIN_TOKEN: ${RELAYOPS_ADMIN_TOKEN:-relayops-admin}
+      RELAYOPS_PROXY_ADDR: ":8080"
+      RELAYOPS_ADMIN_ADDR: ":9090"
+      RELAYOPS_REDIS_URL: "disabled"
+      RELAYOPS_PREVIEW_AI: "true"
+      RELAYOPS_PREVIEW_APIOPS: "true"
+      # Enables the node API for gateway-only nodes; empty keeps it off.
+      RELAYOPS_DATAPLANE_TOKEN: ${RELAYOPS_DATAPLANE_TOKEN:-}
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+
+  # Gateway-only node: no database URL; configuration comes from the control plane.
+  gateway-edge:
+    image: ghcr.io/relayops/relayops:latest
+    build: .
+    restart: unless-stopped
+    profiles: ["split"]
+    depends_on: [gateway]
+    environment:
+      RELAYOPS_ROLE: gateway
+      RELAYOPS_NODE_ID: gateway-edge-1
+      RELAYOPS_CONTROL_PLANE_URL: http://gateway:9090
+      RELAYOPS_DATAPLANE_TOKEN: ${RELAYOPS_DATAPLANE_TOKEN:-}
+      RELAYOPS_DATAPLANE_ALLOW_HTTP: "true" # compose network only; use https across networks
+      RELAYOPS_PROXY_ADDR: ":8080"
+      RELAYOPS_STATUS_ADDR: ":9091"
+      RELAYOPS_REDIS_URL: "disabled"
+    ports:
+      - "8081:8080"
+      - "9091:9091"
+
+  mock:
+    image: ghcr.io/relayops/relayops:latest
+    build: .
+    restart: unless-stopped
+    entrypoint: ["/usr/local/bin/mockupstream", "-addr", ":7070"]
+    ports:
+      - "7070:7070"
+
+volumes:
+  pgdata:

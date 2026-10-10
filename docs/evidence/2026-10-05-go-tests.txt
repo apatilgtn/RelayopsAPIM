@@ -1,0 +1,10 @@
+PACKAGE                                              PASS   FAIL   SKIP  SECONDS
+github.com/relayops/apim/cmd/relayopsctl                7      0      0      0.6
+github.com/relayops/apim/internal/admin                34      0      1     19.1
+github.com/relayops/apim/internal/analytics             9      0      0      0.4
+github.com/relayops/apim/internal/gateway              32      0      0      7.7
+github.com/relayops/apim/internal/policy               18      0      0      0.3
+github.com/relayops/apim/internal/store                14      0      0     19.7
+github.com/relayops/apim/internal/tracing               4      0      0      0.5
+TOTAL                                                 118      0      1
+SKIP github.com/relayops/apim/internal/admin TestUIReviewServer

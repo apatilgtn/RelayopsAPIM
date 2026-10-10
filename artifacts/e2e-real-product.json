@@ -1,0 +1,174 @@
+{
+  "started_at": "2026-10-08T08:45:19.485004+00:00",
+  "steps": [
+    {
+      "name": "gitops-plan-apply",
+      "ok": true,
+      "detail": {
+        "revision": 20,
+        "plan_hash": "1eba3706960b333779be8394ec5319808242664d6499a0f66cbce6cfce897c33"
+      }
+    },
+    {
+      "name": "tenant-isolation",
+      "ok": true,
+      "detail": {
+        "other_tenant": "e2e-other",
+        "status": 404
+      }
+    },
+    {
+      "name": "portal-register",
+      "ok": true,
+      "detail": {
+        "consumer": "c50dc7cb-5028-4ab4-ac94-ec0b27526865"
+      }
+    },
+    {
+      "name": "public-proxy",
+      "ok": true,
+      "detail": {
+        "status": 200,
+        "request_id": ""
+      }
+    },
+    {
+      "name": "keyed-unauthorized",
+      "ok": true,
+      "detail": {
+        "status": 401
+      }
+    },
+    {
+      "name": "keyed-authorized",
+      "ok": true,
+      "detail": {
+        "status": 200
+      }
+    },
+    {
+      "name": "jwt-auth",
+      "ok": true,
+      "detail": {
+        "unauthorized": 401,
+        "authorized": 200
+      }
+    },
+    {
+      "name": "plan-rate-limit",
+      "ok": true,
+      "detail": {
+        "status_429": false,
+        "configured_limit": null,
+        "note": "limit advertised; 429 not observed on this in-memory limiter window"
+      }
+    },
+    {
+      "name": "studio-import",
+      "ok": true,
+      "detail": {
+        "public_suite": "c600a64e-d3e6-42f1-8049-c86bae5f5dd1",
+        "keyed_suite": "6be2be49-6e67-4b72-9056-99f942cc8fbd",
+        "environment": "99e2d6cd-9f4a-4163-a8de-b364b69286c1"
+      }
+    },
+    {
+      "name": "studio-public-suite",
+      "ok": true,
+      "detail": {
+        "run": "d61688d8-cb75-4273-b9b4-5d8c8812361c",
+        "revision": 20,
+        "hash": "99662516e49e36867aca6d0455023b7785e72397bfc7ef3a81a6bdb155ea1b80"
+      }
+    },
+    {
+      "name": "studio-keyed-suite",
+      "ok": true,
+      "detail": {
+        "run": "f5b71eb6-fa57-4aa9-92f9-12c692deed1c"
+      }
+    },
+    {
+      "name": "canary-apply",
+      "ok": true,
+      "detail": {
+        "revision": 21
+      }
+    },
+    {
+      "name": "promote-blocked",
+      "ok": true,
+      "detail": {
+        "status": 412,
+        "revision": 21
+      }
+    },
+    {
+      "name": "studio-canary-suite",
+      "ok": true,
+      "detail": {
+        "run": "160375f5-ede3-4ee4-b42b-f9e72d6ecfc3",
+        "revision": 21
+      }
+    },
+    {
+      "name": "promote-allowed",
+      "ok": true,
+      "detail": {
+        "status": 200,
+        "revision": 21,
+        "result": {
+          "message": "Revision rev_21 successfully promoted to 100% of fleet gateways.",
+          "revision": 21,
+          "status": "active",
+          "target_group": "all"
+        }
+      }
+    },
+    {
+      "name": "breaking-canary-aborted",
+      "ok": true,
+      "detail": {
+        "revision": 22,
+        "comparison_run": "cbb2571b-db9d-44e1-a657-f743ff52a675",
+        "comparison_state": "failed"
+      }
+    },
+    {
+      "name": "request-diagnosis",
+      "ok": true,
+      "detail": {
+        "via": "logs",
+        "count": 1
+      }
+    },
+    {
+      "name": "auto-rollback-config",
+      "ok": true,
+      "detail": {
+        "enabled": true,
+        "threshold": 5
+      }
+    },
+    {
+      "name": "license-features",
+      "ok": true,
+      "detail": {
+        "edition": "unlicensed",
+        "enforced": false,
+        "max_gateways": 0,
+        "max_tenants": 0,
+        "preview_ai": true,
+        "preview_apiops": true,
+        "release_safety": true
+      }
+    }
+  ],
+  "finished_at": "2026-10-08T08:45:35.519681+00:00",
+  "passed": true,
+  "revisions": {
+    "baseline": 20,
+    "promoted": 21,
+    "aborted": 22
+  }
+}

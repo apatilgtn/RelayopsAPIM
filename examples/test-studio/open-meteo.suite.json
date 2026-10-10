@@ -1,0 +1,49 @@
+{
+  "name": "Open-Meteo real API verification",
+  "description": "Read-only public weather API tests through RelayOps. Uses Sydney city-centre coordinates, not a user's location.",
+  "requests": [
+    {
+      "id": "forecast-valid",
+      "name": "Valid Sydney current weather",
+      "method": "GET",
+      "path": "/weather-demo/v1/forecast",
+      "query_params": { "latitude": "-33.8688", "longitude": "151.2093", "current": "temperature_2m", "forecast_days": "1" },
+      "assertions": [
+        { "type": "status_code", "expected": "200" },
+        { "type": "header_equals", "target": "Content-Type", "expected": "application/json; charset=utf-8" },
+        { "type": "json_path_exists", "target": "/latitude", "expected": "" },
+        { "type": "json_path_exists", "target": "/longitude", "expected": "" },
+        { "type": "json_path_exists", "target": "/current/time", "expected": "" },
+        { "type": "json_path_exists", "target": "/current/temperature_2m", "expected": "" },
+        { "type": "json_path_exists", "target": "/current_units/temperature_2m", "expected": "" },
+        { "type": "json_path_equals", "target": "/utc_offset_seconds", "expected": "0" },
+        { "type": "response_time_ms", "expected": "10000", "description": "Demo threshold, not a production SLA" }
+      ]
+    },
+    {
+      "id": "forecast-invalid-latitude",
+      "name": "Latitude outside valid range",
+      "method": "GET",
+      "path": "/weather-demo/v1/forecast",
+      "query_params": { "latitude": "95", "longitude": "151.2093", "current": "temperature_2m" },
+      "assertions": [
+        { "type": "status_code", "expected": "400" },
+        { "type": "header_equals", "target": "Content-Type", "expected": "application/json; charset=utf-8" },
+        { "type": "json_path_equals", "target": "/error", "expected": "true" },
+        { "type": "json_path_exists", "target": "/reason", "expected": "" },
+        { "type": "response_time_ms", "expected": "10000" }
+      ]
+    },
+    {
+      "id": "forecast-missing-coordinates",
+      "name": "Coordinates omitted — provider returns 200 with an empty body",
+      "method": "GET",
+      "path": "/weather-demo/v1/forecast",
+      "query_params": { "current": "temperature_2m" },
+      "assertions": [
+        { "type": "status_code", "expected": "200", "description": "Open-Meteo documents latitude/longitude as required but returns HTTP 200 and an empty body when they are omitted. This records provider behavior, not a gateway defect." },
+        { "type": "response_time_ms", "expected": "10000" }
+      ]
+    }
+  ]
+}

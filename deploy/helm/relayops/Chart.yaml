@@ -1,0 +1,10 @@
+apiVersion: v2
+name: relayops
+description: >
+  RelayOps API management: gateway data plane, control-plane API, dashboard and
+  developer portal in one binary, with revisioned config, canaries and coordinated
+  automatic rollback. Requires an external PostgreSQL (and optionally Redis).
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords: [api-gateway, apim, gateway, canary, gitops]
