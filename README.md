@@ -1,9 +1,8 @@
 # RelayOps APIM
 
+[![CI](https://github.com/apatilgtn/RelayopsAPIM/actions/workflows/ci.yml/badge.svg)](https://github.com/apatilgtn/RelayopsAPIM/actions/workflows/ci.yml)
 [![Go Version](https://img.shields.io/badge/go-1.26%2B-blue.svg)](https://go.dev/)
 [![Docker Image](https://img.shields.io/badge/container-distroless%20nonroot-brightgreen.svg)](docker-compose.yml)
-[![Hot Reload](https://img.shields.io/badge/hot--reload-%3C10ms%20zero--downtime-success.svg)](README.md#revisions-canaries-and-rollback)
-[![Latency](https://img.shields.io/badge/proxy%20latency-%3C1ms-orange.svg)](docs/evidence)
 [![Safety](https://img.shields.io/badge/safety-auto--rollback%20%26%20canary-purple.svg)](README.md#revisions-canaries-and-rollback)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
@@ -12,22 +11,8 @@ RelayOps is a modern, high-performance API gateway and management platform built
 A single lightweight Go binary executes the high-throughput gateway (data plane), the administrative control-plane API, the operator console, the test studio, the self-service developer portal, and the Model Context Protocol (MCP) server. All state lives in PostgreSQL (or Supabase). Redis is optional for cluster-wide distributed rate limits.
 
 <p align="center">
-  <img src="docs/images/relayops-blueprint.png" alt="RelayOps APIM - Architectural System Blueprint" width="100%">
+  <img src="docs/images/architecture.svg" alt="RelayOps architecture: clients call gateway nodes, which apply policy and forward to upstreams; the control plane manages configuration, releases and Orbit AI and stores state in PostgreSQL" width="100%">
 </p>
-
-```
-                ┌──────────────────────── control plane (:9090) ─────────────────────────┐
-  relayopsctl ─▶│ REST API · dashboard · portal · /metrics · plan/apply · rollout        │
-  GitHub Action │ auto-rollback supervisor (one active node via Postgres advisory lock)  │
-                └──────────────┬─────────────────────────────────────────────────────────┘
-                               │ revisions + LISTEN/NOTIFY
- clients ─:8080─▶ GATEWAY  cohort (stable|canary) ▶ route ▶ CORS ▶ auth ▶ subscription ▶
-                           rate limit / quota ▶ load balance ▶ retry ▶ circuit breaker ▶ upstreams
-                               │ request logs (COPY), OTLP spans, Prometheus
-                ┌──────────────▼──────────────────────────────────────────────────────────┐
-                │ PostgreSQL: revisions · apis · plans · consumers · keys · logs · audit  │
-                └─────────────────────────────────────────────────────────────────────────┘
-```
 
 ---
 
@@ -87,7 +72,7 @@ The built-in Developer Portal ([http://localhost:9090/portal](http://localhost:9
 ## 🏛️ System Architecture: Data Plane, Control Plane & AI
 
 <p align="center">
-  <img src="docs/images/relayops-architecture.png" alt="RelayOps Core Container Architecture" width="100%">
+  <img src="docs/images/request-path.svg" alt="Request path in a gateway node: release cohort, route, inspect, authenticate, authorize, limit, plugins and budget, proxy" width="100%">
 </p>
 
 RelayOps APIM decouples into three specialized engines inside a single, unified Go runtime:
@@ -184,6 +169,10 @@ Apply always sends the hash of the plan it showed. The server refuses the apply 
 The GitHub Action at [.github/actions/relayops-config](.github/actions/relayops-config/action.yml) runs plan on pull requests, writes it to the job summary, and posts it as a PR comment. On merge it applies the reviewed plan, optionally as a canary. [examples/gitops/relayops-config.workflow.yml](examples/gitops/relayops-config.workflow.yml) is a complete workflow.
 
 ## Revisions, canaries and rollback
+
+<p align="center">
+  <img src="docs/images/release-safety.svg" alt="Release safety loop: plan, preview impact, Test Studio gates, canary, then promote or roll back automatically" width="100%">
+</p>
 
 **What a revision pins.** API definitions (routing, auth settings, limits, traffic policy) and plan definitions (rate limits and quotas) come from the revision a node serves. A canary that tightens a plan therefore affects only the canary cohort.
 

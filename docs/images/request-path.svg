@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 330" width="1200" height="330" role="img" aria-labelledby="t d">
+  <title id="t">RelayOps request path</title>
+  <desc id="d">Each request passes eight stages in a gateway node: release cohort, route, protocol inspection, authentication, authorization, limits, plugins and budgets, and proxy. Any stage can refuse the request with a recorded reason. Every request is logged, traced and counted.</desc>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#206147"/></marker>
+    <style>
+      text { font-family: Inter, "Segoe UI", Helvetica, Arial, sans-serif; fill: #172e27; }
+      .n { font-size: 11px; font-weight: 800; fill: #c4f36b; }
+      .h { font-size: 13.5px; font-weight: 700; fill: #ffffff; }
+      .s { font-size: 11.5px; fill: #c9ddd3; }
+      .m { font-size: 12px; fill: #53665e; }
+      .box { fill: #132d24; }
+    </style>
+  </defs>
+  <rect width="1200" height="330" fill="#f5f7f6"/>
+  <text x="40" y="44" style="font-size:20px;font-weight:800">Request path in a gateway node</text>
+  <text x="40" y="66" class="m">Stages run in this order. The first stage that refuses ends the request; later stages never run.</text>
+
+  <g transform="translate(40,92)">
+    <!-- 8 stages, 128 wide, 14 gap -->
+    <g><rect class="box" x="0" y="0" width="128" height="118" rx="10"/>
+      <text x="12" y="24" class="n">1</text><text x="12" y="46" class="h">Release cohort</text>
+      <text x="12" y="68" class="s">Stable or canary,</text><text x="12" y="84" class="s">sticky per caller</text></g>
+    <g transform="translate(142,0)"><rect class="box" width="128" height="118" rx="10"/>
+      <text x="12" y="24" class="n">2</text><text x="12" y="46" class="h">Route</text>
+      <text x="12" y="68" class="s">Match the API by</text><text x="12" y="84" class="s">base path</text></g>
+    <g transform="translate(284,0)"><rect class="box" width="128" height="118" rx="10"/>
+      <text x="12" y="24" class="n">3</text><text x="12" y="46" class="h">Inspect</text>
+      <text x="12" y="68" class="s">GraphQL syntax tree,</text><text x="12" y="84" class="s">gRPC framing,</text><text x="12" y="100" class="s">MCP JSON-RPC</text></g>
+    <g transform="translate(426,0)"><rect class="box" width="128" height="118" rx="10"/>
+      <text x="12" y="24" class="n">4</text><text x="12" y="46" class="h">Authenticate</text>
+      <text x="12" y="68" class="s">API key, JWT,</text><text x="12" y="84" class="s">OIDC, mTLS</text></g>
+    <g transform="translate(568,0)"><rect class="box" width="128" height="118" rx="10"/>
+      <text x="12" y="24" class="n">5</text><text x="12" y="46" class="h">Authorize</text>
+      <text x="12" y="68" class="s">Subscription, plan,</text><text x="12" y="84" class="s">gRPC method and</text><text x="12" y="100" class="s">MCP tool rules</text></g>
+    <g transform="translate(710,0)"><rect class="box" width="128" height="118" rx="10"/>
+      <text x="12" y="24" class="n">6</text><text x="12" y="46" class="h">Limit</text>
+      <text x="12" y="68" class="s">Rate limits and</text><text x="12" y="84" class="s">quotas (Redis for</text><text x="12" y="100" class="s">fleet-wide counts)</text></g>
+    <g transform="translate(852,0)"><rect class="box" width="128" height="118" rx="10"/>
+      <text x="12" y="24" class="n">7</text><text x="12" y="46" class="h">Plugins &amp; budget</text>
+      <text x="12" y="68" class="s">WASM policies,</text><text x="12" y="84" class="s">AI token budget</text><text x="12" y="100" class="s">reservation</text></g>
+    <g transform="translate(994,0)"><rect width="128" height="118" rx="10" fill="#206147"/>
+      <text x="12" y="24" class="n">8</text><text x="12" y="46" class="h">Proxy</text>
+      <text x="12" y="68" class="s" style="fill:#e3f1e8">Load balancing,</text><text x="12" y="84" class="s" style="fill:#e3f1e8">retries, circuit</text><text x="12" y="100" class="s" style="fill:#e3f1e8">breakers → upstream</text></g>
+    <g fill="none" stroke="#206147" stroke-width="2">
+      <path d="M128 59 H140" marker-end="url(#a)"/><path d="M270 59 H282" marker-end="url(#a)"/><path d="M412 59 H424" marker-end="url(#a)"/>
+      <path d="M554 59 H566" marker-end="url(#a)"/><path d="M696 59 H708" marker-end="url(#a)"/><path d="M838 59 H850" marker-end="url(#a)"/><path d="M980 59 H992" marker-end="url(#a)"/>
+    </g>
+  </g>
+
+  <g transform="translate(40,232)">
+    <rect width="555" height="62" rx="10" fill="#fff4f4" stroke="#f3cccc"/>
+    <text x="16" y="26" style="font-size:13px;font-weight:700;fill:#7a1f1f">Refused at any stage</text>
+    <text x="16" y="46" class="m">4xx/5xx with the reason, plus a decision trail the console and Orbit AI explain</text>
+    <rect x="567" width="555" height="62" rx="10" fill="#ffffff" stroke="#dce4df"/>
+    <text x="583" y="26" style="font-size:13px;font-weight:700">Every request, asynchronously</text>
+    <text x="583" y="46" class="m">Request log (sampled or full), OpenTelemetry span, Prometheus counters</text>
+  </g>
+</svg>

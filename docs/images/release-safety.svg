@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 340" width="1200" height="340" role="img" aria-labelledby="t d">
+  <title id="t">RelayOps release safety loop</title>
+  <desc id="d">A configuration change is previewed for consumer impact, verified by Test Studio gates against a real gateway, exposed to a canary share of callers, and observed against the baseline. A healthy canary is promoted; a failing one is rolled back automatically within seconds, unless the errors come from APIs the release did not change.</desc>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#206147"/></marker>
+    <marker id="r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#b42318"/></marker>
+    <style>
+      text { font-family: Inter, "Segoe UI", Helvetica, Arial, sans-serif; fill: #172e27; }
+      .h { font-size: 14px; font-weight: 700; }
+      .s { font-size: 12px; fill: #53665e; }
+      .n { font-size: 11px; font-weight: 800; fill: #206147; letter-spacing: .06em; }
+      .card { fill: #ffffff; stroke: #dce4df; stroke-width: 1.2; }
+    </style>
+  </defs>
+  <rect width="1200" height="340" fill="#f5f7f6"/>
+  <text x="40" y="44" style="font-size:20px;font-weight:800">Release safety loop</text>
+  <text x="40" y="66" class="s">Know what a change will do before it reaches callers, and take it back automatically if it goes wrong.</text>
+
+  <g transform="translate(40,96)">
+    <rect class="card" width="196" height="112" rx="10"/>
+    <text x="16" y="26" class="n">1 · CHANGE</text><text x="16" y="50" class="h">Plan the change</text>
+    <text x="16" y="72" class="s">Console, admin API or</text><text x="16" y="88" class="s">relayopsctl plan; field diff</text><text x="16" y="104" class="s">and a pinned plan hash</text>
+    <g transform="translate(232,0)"><rect class="card" width="196" height="112" rx="10"/>
+      <text x="16" y="26" class="n">2 · IMPACT</text><text x="16" y="50" class="h">Preview impact</text>
+      <text x="16" y="72" class="s">Consumers affected,</text><text x="16" y="88" class="s">replay of recent requests</text><text x="16" y="104" class="s">against the new config</text></g>
+    <g transform="translate(464,0)"><rect class="card" width="196" height="112" rx="10"/>
+      <text x="16" y="26" class="n">3 · VERIFY</text><text x="16" y="50" class="h">Test Studio gates</text>
+      <text x="16" y="72" class="s">Suites run through a real</text><text x="16" y="88" class="s">gateway on the candidate;</text><text x="16" y="104" class="s">failures block promotion</text></g>
+    <g transform="translate(696,0)"><rect class="card" width="196" height="112" rx="10"/>
+      <text x="16" y="26" class="n">4 · CANARY</text><text x="16" y="50" class="h">Expose a share</text>
+      <text x="16" y="72" class="s">Percentage, header or</text><text x="16" y="88" class="s">dedicated canary nodes;</text><text x="16" y="104" class="s">sticky per caller</text></g>
+    <g transform="translate(928,0)"><rect width="196" height="112" rx="10" fill="#132d24"/>
+      <text x="16" y="26" class="n" style="fill:#c4f36b">5 · DECIDE</text><text x="16" y="50" class="h" style="fill:#fff">Observe and decide</text>
+      <text x="16" y="72" class="s" style="fill:#c9ddd3">Candidate 5xx rate against</text><text x="16" y="88" class="s" style="fill:#c9ddd3">the baseline, attributed to</text><text x="16" y="104" class="s" style="fill:#c9ddd3">the APIs that changed</text></g>
+    <g fill="none" stroke="#206147" stroke-width="2">
+      <path d="M196 56 H230" marker-end="url(#a)"/><path d="M428 56 H462" marker-end="url(#a)"/>
+      <path d="M660 56 H694" marker-end="url(#a)"/><path d="M892 56 H926" marker-end="url(#a)"/>
+    </g>
+  </g>
+
+  <!-- outcomes -->
+  <g transform="translate(40,240)">
+    <rect x="696" width="196" height="64" rx="10" fill="#eaf5ee" stroke="#cde6d7"/>
+    <text x="712" y="26" class="h" style="fill:#206147">Promote</text>
+    <text x="712" y="46" class="s">Candidate becomes the release</text>
+    <rect x="928" width="196" height="64" rx="10" fill="#fff4f4" stroke="#f3cccc"/>
+    <text x="944" y="26" class="h" style="fill:#b42318">Roll back automatically</text>
+    <text x="944" y="46" class="s">Within seconds, audited</text>
+    <rect x="0" width="660" height="64" rx="10" fill="#ffffff" stroke="#dce4df"/>
+    <text x="16" y="26" class="h">Held, not rolled back, when the cause is elsewhere</text>
+    <text x="16" y="46" class="s">Errors on APIs the release did not change (a shared upstream outage) raise an alert instead.</text>
+    <path d="M1026 -24 V-2" fill="none" stroke="#b42318" stroke-width="2" marker-end="url(#r)"/>
+    <path d="M1000 -24 V-12 H794 V-2" fill="none" stroke="#206147" stroke-width="2" marker-end="url(#a)"/>
+  </g>
+</svg>
