@@ -21,9 +21,12 @@ import (
 type Config struct {
 	BaseURL  string        // e.g. https://integrate.api.nvidia.com/v1 (".../chat/completions" is appended)
 	APIKey   string        // sent as "Authorization: Bearer <key>"
-	Model    string        // e.g. meta/llama-3.3-70b-instruct
+	Model    string        // e.g. nvidia/nemotron-3-super-120b-a12b
 	Timeout  time.Duration // per model call; default 60s
 	MaxSteps int           // tool-calling rounds per question; default 6
+	// FallbackModel answers when Model is unavailable (retired, unknown,
+	// overloaded or unreachable). Same endpoint and key.
+	FallbackModel string
 }
 
 // Enabled reports whether a model is configured.
@@ -78,6 +81,9 @@ type Answer struct {
 	// Mode is "tools" when the model called tools itself, or "context" when
 	// the model does not support tool calling and answered from a snapshot.
 	Mode string `json:"mode"`
+	// Fallback is set when the primary model was unavailable and the
+	// fallback model answered.
+	Fallback bool `json:"fallback,omitempty"`
 }
 
 // ErrNotConfigured is returned when no model is configured.
@@ -114,18 +120,31 @@ func (c *Client) Ask(ctx context.Context, system string, history []Message, tool
 	if c == nil || !c.cfg.Enabled() {
 		return Answer{}, ErrNotConfigured
 	}
+	ans, err := c.askWith(ctx, c.cfg.Model, system, history, tools, snapshot)
+	if err == nil || c.cfg.FallbackModel == "" || ctx.Err() != nil || !modelUnavailable(err) {
+		return ans, err
+	}
+	fb, ferr := c.askWith(ctx, c.cfg.FallbackModel, system, history, tools, snapshot)
+	if ferr != nil {
+		return fb, fmt.Errorf("%v; fallback model %s: %w", err, c.cfg.FallbackModel, ferr)
+	}
+	fb.Fallback = true
+	return fb, nil
+}
+
+func (c *Client) askWith(ctx context.Context, model, system string, history []Message, tools []Tool, snapshot func(context.Context) (string, []Step)) (Answer, error) {
 	byName := map[string]Tool{}
 	for _, t := range tools {
 		byName[t.Name] = t
 	}
 	msgs := append([]Message{{Role: "system", Content: system}}, history...)
-	ans := Answer{Model: c.cfg.Model, Mode: "tools"}
+	ans := Answer{Model: model, Mode: "tools"}
 
 	for step := 0; step < c.cfg.MaxSteps; step++ {
-		reply, usage, err := c.complete(ctx, msgs, tools)
+		reply, usage, err := c.complete(ctx, model, msgs, tools)
 		var unsupported *toolsUnsupportedError
 		if errors.As(err, &unsupported) && snapshot != nil {
-			return c.askWithSnapshot(ctx, system, history, snapshot, ans)
+			return c.askWithSnapshot(ctx, model, system, history, snapshot, ans)
 		}
 		if err != nil {
 			return ans, err
@@ -149,7 +168,7 @@ func (c *Client) Ask(ctx context.Context, system string, history []Message, tool
 	}
 	// Out of steps: ask for an answer from what has been gathered.
 	msgs = append(msgs, Message{Role: "user", Content: "Answer now from the data above without calling more tools."})
-	reply, usage, err := c.complete(ctx, msgs, nil)
+	reply, usage, err := c.complete(ctx, model, msgs, nil)
 	if err != nil {
 		return ans, err
 	}
@@ -159,12 +178,12 @@ func (c *Client) Ask(ctx context.Context, system string, history []Message, tool
 	return ans, nil
 }
 
-func (c *Client) askWithSnapshot(ctx context.Context, system string, history []Message, snapshot func(context.Context) (string, []Step), ans Answer) (Answer, error) {
+func (c *Client) askWithSnapshot(ctx context.Context, model, system string, history []Message, snapshot func(context.Context) (string, []Step), ans Answer) (Answer, error) {
 	data, steps := snapshot(ctx)
 	ans.Mode, ans.Steps = "context", steps
 	sys := system + "\n\nYou cannot call tools with this model. Answer only from this snapshot of gateway data (JSON); say so if it does not contain the answer:\n" + data
 	msgs := append([]Message{{Role: "system", Content: sys}}, history...)
-	reply, usage, err := c.complete(ctx, msgs, nil)
+	reply, usage, err := c.complete(ctx, model, msgs, nil)
 	if err != nil {
 		return ans, err
 	}
@@ -211,9 +230,32 @@ type completionResponse struct {
 	Usage Usage `json:"usage"`
 }
 
-func (c *Client) complete(ctx context.Context, msgs []Message, tools []Tool) (Message, Usage, error) {
+// modelError is a failed model call; Status is 0 when the model was unreachable.
+type modelError struct {
+	Status int
+	msg    string
+}
+
+func (e *modelError) Error() string { return e.msg }
+
+// modelUnavailable reports failures a different model may not have: the
+// model is unknown or retired, overloaded, failing, or unreachable.
+func modelUnavailable(err error) bool {
+	var me *modelError
+	if !errors.As(err, &me) {
+		return false
+	}
+	switch {
+	case me.Status == 0, me.Status == http.StatusNotFound, me.Status == http.StatusGone,
+		me.Status == http.StatusRequestTimeout, me.Status == http.StatusTooManyRequests, me.Status >= 500:
+		return true
+	}
+	return false
+}
+
+func (c *Client) complete(ctx context.Context, model string, msgs []Message, tools []Tool) (Message, Usage, error) {
 	body := map[string]any{
-		"model":       c.cfg.Model,
+		"model":       model,
 		"messages":    msgs,
 		"temperature": 0.2,
 		"max_tokens":  1200,
@@ -243,7 +285,7 @@ func (c *Client) complete(ctx context.Context, msgs []Message, tools []Tool) (Me
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return Message{}, Usage{}, fmt.Errorf("orbit: model unreachable: %w", err)
+		return Message{}, Usage{}, &modelError{msg: "orbit: model unreachable: " + err.Error()}
 	}
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
@@ -257,7 +299,7 @@ func (c *Client) complete(ctx context.Context, msgs []Message, tools []Tool) (Me
 			strings.Contains(strings.ToLower(detail), "tool") {
 			return Message{}, Usage{}, &toolsUnsupportedError{msg: detail}
 		}
-		return Message{}, Usage{}, fmt.Errorf("orbit: model returned HTTP %d: %s", resp.StatusCode, detail)
+		return Message{}, Usage{}, &modelError{Status: resp.StatusCode, msg: fmt.Sprintf("orbit: model %s returned HTTP %d: %s", model, resp.StatusCode, detail)}
 	}
 	var out completionResponse
 	if err := json.Unmarshal(data, &out); err != nil || len(out.Choices) == 0 {

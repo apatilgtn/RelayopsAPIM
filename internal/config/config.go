@@ -63,10 +63,11 @@ type Config struct {
 	// Orbit AI, the console's operations assistant. Any OpenAI-compatible
 	// chat completions endpoint; a RelayOps AI route also works, which puts
 	// Orbit's own model usage under the gateway's budgets and audit.
-	OrbitBaseURL   string // RELAYOPS_ORBIT_BASE_URL - e.g. https://integrate.api.nvidia.com/v1
-	OrbitModel     string // RELAYOPS_ORBIT_MODEL - e.g. meta/llama-3.3-70b-instruct
-	OrbitAPIKey    string // RELAYOPS_ORBIT_API_KEY - sent as a bearer token
-	WasmPluginsDir string // RELAYOPS_WASM_PLUGINS_DIR - directory of *.wasm policy plugins APIs can list in traffic_policy.wasm_plugins
+	OrbitBaseURL       string // RELAYOPS_ORBIT_BASE_URL - e.g. https://integrate.api.nvidia.com/v1
+	OrbitModel         string // RELAYOPS_ORBIT_MODEL - e.g. meta/llama-3.3-70b-instruct
+	OrbitAPIKey        string // RELAYOPS_ORBIT_API_KEY - sent as a bearer token
+	OrbitFallbackModel string // RELAYOPS_ORBIT_FALLBACK_MODEL - answers when the model is retired, overloaded or unreachable
+	WasmPluginsDir     string // RELAYOPS_WASM_PLUGINS_DIR - directory of *.wasm policy plugins APIs can list in traffic_policy.wasm_plugins
 
 	LogExport string // RELAYOPS_LOG_EXPORT - "otlp" sends every request log to the OTEL collector (OTEL_EXPORTER_OTLP_[LOGS_]ENDPOINT)
 
@@ -182,6 +183,7 @@ func Load() Config {
 		OrbitBaseURL:         strings.TrimSpace(env("RELAYOPS_ORBIT_BASE_URL", "")),
 		OrbitModel:           strings.TrimSpace(env("RELAYOPS_ORBIT_MODEL", "")),
 		OrbitAPIKey:          strings.TrimSpace(env("RELAYOPS_ORBIT_API_KEY", "")),
+		OrbitFallbackModel:   strings.TrimSpace(env("RELAYOPS_ORBIT_FALLBACK_MODEL", "")),
 		LeaderElection:       strings.ToLower(env("RELAYOPS_LEADER_ELECTION", "postgres")),
 		LogExport:            strings.ToLower(env("RELAYOPS_LOG_EXPORT", "")),
 		TLSCertsDir:          env("RELAYOPS_TLS_CERTS_DIR", ""),

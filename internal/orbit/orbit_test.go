@@ -131,3 +131,40 @@ func TestAskWithoutModel(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestAskFallsBackWhenPrimaryModelIsGone(t *testing.T) {
+	var models []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		models = append(models, body["model"].(string))
+		if body["model"] == "retired" {
+			w.WriteHeader(http.StatusGone)
+			_, _ = w.Write([]byte(`{"detail":"model reached end of life"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"answered by the fallback"}}]}`))
+	}))
+	defer srv.Close()
+	ans, err := New(Config{BaseURL: srv.URL, Model: "retired", FallbackModel: "backup"}).Ask(context.Background(), "s", []Message{{Role: "user", Content: "q"}}, nil, nil)
+	if err != nil || !ans.Fallback || ans.Model != "backup" || ans.Text != "answered by the fallback" {
+		t.Fatalf("ans=%+v err=%v", ans, err)
+	}
+	if strings.Join(models, ",") != "retired,backup" {
+		t.Fatalf("model calls: %v", models)
+	}
+}
+
+func TestAskDoesNotFallBackOnBadRequest(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":"messages too long"}`))
+	}))
+	defer srv.Close()
+	_, err := New(Config{BaseURL: srv.URL, Model: "primary", FallbackModel: "backup"}).Ask(context.Background(), "s", []Message{{Role: "user", Content: "q"}}, nil, nil)
+	if err == nil || calls != 1 {
+		t.Fatalf("a request error must not be retried on another model: calls=%d err=%v", calls, err)
+	}
+}

@@ -194,7 +194,7 @@ func run() error {
 		leaderOpt,
 		admin.WithRuntimeInfo(admin.RuntimeInfo{Role: cfg.Role, LogSampleRate: cfg.LogSampleRate}),
 		admin.WithAlertWebhook(cfg.AlertWebhookURL),
-		admin.WithOrbit(orbit.Config{BaseURL: cfg.OrbitBaseURL, Model: cfg.OrbitModel, APIKey: cfg.OrbitAPIKey}),
+		admin.WithOrbit(orbit.Config{BaseURL: cfg.OrbitBaseURL, Model: cfg.OrbitModel, APIKey: cfg.OrbitAPIKey, FallbackModel: cfg.OrbitFallbackModel}),
 	)
 	if db != nil {
 		gw.SetMCPReporter(adminCore.MCPReporter(cfg.NodeID))
