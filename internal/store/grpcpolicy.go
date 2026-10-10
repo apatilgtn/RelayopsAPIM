@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	MaxGRPCRules          = 100
-	MaxGRPCMessageBytes   = 64 << 20
+	MaxGRPCRules           = 100
+	MaxGRPCMessageBytes    = 64 << 20
 	MaxGRPCDescriptorBytes = 4 << 20
 )
 

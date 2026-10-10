@@ -156,9 +156,9 @@ func (s *Server) synthesizeOpenAPISpec(a store.API) map[string]any {
 	doc := map[string]any{
 		"openapi": "3.0.0",
 		"info": map[string]any{
-			"title":          title,
-			"description":    desc,
-			"version":        "1.0.0",
+			"title":       title,
+			"description": desc,
+			"version":     "1.0.0",
 			// Marks a reference the gateway generated because the API owner
 			// published none; clients should not treat it as a contract.
 			"x-relayops-synthesized": true,

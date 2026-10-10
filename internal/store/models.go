@@ -71,10 +71,10 @@ type API struct {
 }
 
 type GraphQLPolicy struct {
-	MaxDepth           int      `json:"max_depth"`           // e.g. 10 (0 = unlimited)
-	MaxCost            int      `json:"max_cost"`            // e.g. 500 (0 = unlimited)
-	AllowIntrospection bool     `json:"allow_introspection"` // whether __schema queries are permitted
-	AllowMutations     bool     `json:"allow_mutations"`     // if false, only queries allowed
+	MaxDepth           int      `json:"max_depth"`                     // e.g. 10 (0 = unlimited)
+	MaxCost            int      `json:"max_cost"`                      // e.g. 500 (0 = unlimited)
+	AllowIntrospection bool     `json:"allow_introspection"`           // whether __schema queries are permitted
+	AllowMutations     bool     `json:"allow_mutations"`               // if false, only queries allowed
 	OperationAllowlist []string `json:"operation_allowlist,omitempty"` // operation names or "sha256:<hex>" query hashes
 	MaxAliases         int      `json:"max_aliases,omitempty"`         // 0 = unlimited
 	MaxBatchSize       int      `json:"max_batch_size,omitempty"`      // operations per batched request; 0 = batching refused

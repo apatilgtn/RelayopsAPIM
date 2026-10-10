@@ -196,9 +196,9 @@ func FingerprintOf(kind string, def json.RawMessage) (name, fp string, err error
 
 // ItemStatus is one entry of a list result as the gateway judged it.
 type ItemStatus struct {
-	Kind        string          `json:"kind"`
-	Name        string          `json:"name"` // tool or prompt name, or resource URI
-	Fingerprint string          `json:"fingerprint,omitempty"`
+	Kind        string `json:"kind"`
+	Name        string `json:"name"` // tool or prompt name, or resource URI
+	Fingerprint string `json:"fingerprint,omitempty"`
 	// Status: allowed, hidden (policy), unpinned (not in the catalog),
 	// changed (definition differs from its pin).
 	Status     string          `json:"status"`

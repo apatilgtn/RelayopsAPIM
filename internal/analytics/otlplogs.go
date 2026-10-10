@@ -180,7 +180,9 @@ func intAttr(k string, v int64) otlpAttr {
 	s := strconv.FormatInt(v, 10)
 	return otlpAttr{Key: k, Value: otlpValue{IntValue: &s}}
 }
-func dblAttr(k string, v float64) otlpAttr { return otlpAttr{Key: k, Value: otlpValue{DoubleValue: &v}} }
+func dblAttr(k string, v float64) otlpAttr {
+	return otlpAttr{Key: k, Value: otlpValue{DoubleValue: &v}}
+}
 
 // EncodeOTLPLogs renders request logs as an OTLP ExportLogsServiceRequest.
 func EncodeOTLPLogs(logs []store.RequestLog, service, nodeID string) ([]byte, error) {

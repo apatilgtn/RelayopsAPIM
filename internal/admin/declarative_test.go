@@ -313,4 +313,3 @@ func TestDeclarativeMultiProtocolAndAIPreservation(t *testing.T) {
 		t.Fatalf("expected computed plan to preserve grpc fields and is_ai, got %+v", res)
 	}
 }
-

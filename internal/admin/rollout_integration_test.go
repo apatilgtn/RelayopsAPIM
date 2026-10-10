@@ -2,9 +2,9 @@ package admin
 
 import (
 	"context"
-	"fmt"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"

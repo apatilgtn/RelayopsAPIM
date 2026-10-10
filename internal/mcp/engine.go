@@ -21,13 +21,13 @@ const (
 )
 
 type CallerContext struct {
-	Role         CallerRole
-	ConsumerID   string
-	ConsumerName string
+	Role          CallerRole
+	ConsumerID    string
+	ConsumerName  string
 	ConsumerEmail string
-	TenantID     string
-	APIKey       string
-	AdminToken   string
+	TenantID      string
+	APIKey        string
+	AdminToken    string
 }
 
 // Engine implements the central Model Context Protocol server.

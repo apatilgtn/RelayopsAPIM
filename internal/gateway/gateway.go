@@ -42,19 +42,19 @@ import (
 const maxRetryBody = 1 << 20
 
 type Gateway struct {
-	snap         atomic.Pointer[Snapshot]
-	limiter      *Limiter
-	redisLimiter *RedisLimiter
-	jwks         *JWKSManager
-	evaluator    *policy.Evaluator
-	collector    *analytics.Collector
-	proxy        *httputil.ReverseProxy
-	nodeID       string
-	nodeGroup    string
-	isCanary     bool
-	upstreams    *upstreamRegistry
-	tracer       *tracing.Tracer
-	runnerSecret string
+	snap           atomic.Pointer[Snapshot]
+	limiter        *Limiter
+	redisLimiter   *RedisLimiter
+	jwks           *JWKSManager
+	evaluator      *policy.Evaluator
+	collector      *analytics.Collector
+	proxy          *httputil.ReverseProxy
+	nodeID         string
+	nodeGroup      string
+	isCanary       bool
+	upstreams      *upstreamRegistry
+	tracer         *tracing.Tracer
+	runnerSecret   string
 	aiBudgetLedger AIBudgetLedger
 	wasm           *policy.WasmManager // nil: APIs that list WASM plugins are refused
 	// mcpDrift remembers MCP tools whose definition no longer matches its pin
@@ -63,7 +63,7 @@ type Gateway struct {
 	mcpDriftEvents atomic.Uint64
 	mcpObs         chan store.MCPObservation // definitions to report for review (nil: not reporting)
 	apq            sync.Map                  // GraphQL API id -> *graphql.PersistedCache
-	trustedProxies []*net.IPNet        // proxies whose forwarded client-certificate headers are accepted
+	trustedProxies []*net.IPNet              // proxies whose forwarded client-certificate headers are accepted
 
 	tmu        sync.Mutex
 	transports map[transportKey]*http.Transport
@@ -91,7 +91,7 @@ type ctxKey struct{}
 // reqState carries per-request data from the handler into the proxy callbacks.
 type reqState struct {
 	route              *Route
-	mcp                *mcpExchange // set for MCP JSON-RPC requests
+	mcp                *mcpExchange  // set for MCP JSON-RPC requests
 	grpc               *grpcExchange // set for gRPC calls
 	gqlWS              *gqlWSCheck   // set for GraphQL over WebSocket
 	requestID          string
@@ -953,7 +953,6 @@ func (g *Gateway) reject(w http.ResponseWriter, st *reqState, status int, code, 
 	}
 	writeError(w, status, code, msg, st)
 }
-
 
 func snapVersion(s *Snapshot) int64 {
 	if s == nil {

@@ -140,7 +140,9 @@ func (g *Gateway) parseMCP(w http.ResponseWriter, r *http.Request, st *reqState,
 	return true
 }
 
-func mcpDriftKey(apiID, kind, name, pin string) string { return apiID + "|" + kind + "|" + name + "|" + pin }
+func mcpDriftKey(apiID, kind, name, pin string) string {
+	return apiID + "|" + kind + "|" + name + "|" + pin
+}
 
 func (ex *mcpExchange) pin(kind, name string) string {
 	switch kind {
@@ -386,7 +388,6 @@ func (g *Gateway) modifyResponse(resp *http.Response) error {
 	}
 	return nil
 }
-
 
 // processMCPResponse rewrites the server messages in one JSON body or SSE
 // event: list results are filtered, tools/call results are observed. Data

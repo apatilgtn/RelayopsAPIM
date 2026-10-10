@@ -156,4 +156,3 @@ func TestMTLSClientCAAndExtraction(t *testing.T) {
 		t.Fatalf("header extraction failed: %+v", infoHdr)
 	}
 }
-

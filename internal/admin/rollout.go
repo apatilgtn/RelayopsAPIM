@@ -165,14 +165,14 @@ type AutoRollbackEvaluationResult struct {
 	InCooldown           bool    `json:"in_cooldown"`
 	EvaluatedBy          string  `json:"evaluated_by,omitempty"`
 
-	BaselineSufficient  bool      `json:"baseline_sufficient"`
-	DecisionBasis       string    `json:"decision_basis,omitempty"` // relative | absolute | held | not_attributed
+	BaselineSufficient bool   `json:"baseline_sufficient"`
+	DecisionBasis      string `json:"decision_basis,omitempty"` // relative | absolute | held | not_attributed
 	// Attribution: what the candidate changed and how those APIs fared.
-	ChangedAPIs              []string `json:"changed_apis,omitempty"`
-	ChangedAPIErrorRatePct   float64  `json:"changed_api_error_rate_pct,omitempty"`
-	UnchangedAPIErrorRatePct float64  `json:"unchanged_api_error_rate_pct,omitempty"`
-	BaselineWindowStart time.Time `json:"baseline_window_start,omitempty"`
-	BaselineWindowEnd   time.Time `json:"baseline_window_end,omitempty"`
+	ChangedAPIs              []string  `json:"changed_apis,omitempty"`
+	ChangedAPIErrorRatePct   float64   `json:"changed_api_error_rate_pct,omitempty"`
+	UnchangedAPIErrorRatePct float64   `json:"unchanged_api_error_rate_pct,omitempty"`
+	BaselineWindowStart      time.Time `json:"baseline_window_start,omitempty"`
+	BaselineWindowEnd        time.Time `json:"baseline_window_end,omitempty"`
 }
 
 // evaluateAutoRollback runs one evaluation if this node wins the cluster lock.

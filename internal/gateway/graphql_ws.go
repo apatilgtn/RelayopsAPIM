@@ -168,9 +168,9 @@ func (c *gqlWSConn) Write(p []byte) (int, error) {
 // inspect checks one client text message and reports whether to forward it.
 func (c *gqlWSConn) inspect(data []byte) bool {
 	var m struct {
-		ID      string           `json:"id"`
-		Type    string           `json:"type"`
-		Payload graphql.Request  `json:"payload"`
+		ID      string          `json:"id"`
+		Type    string          `json:"type"`
+		Payload graphql.Request `json:"payload"`
 	}
 	if json.Unmarshal(data, &m) != nil || (m.Type != "subscribe" && m.Type != "start") {
 		return true // connection_init, ping, complete, ...

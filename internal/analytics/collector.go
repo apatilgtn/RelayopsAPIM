@@ -54,7 +54,7 @@ type Collector struct {
 	upstreamDurationCount    atomic.Int64
 
 	onTick     func(Tick)
-	exporter   *LogExporter // nil: no OTLP log export
+	exporter   *LogExporter  // nil: no OTLP log export
 	sampleRate atomic.Uint64 // float64 bits; 0 means 1 (keep everything)
 	sampledOut atomic.Int64  // successful requests not persisted because of sampling
 }

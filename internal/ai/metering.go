@@ -19,14 +19,14 @@ const (
 // StreamMeter incrementally parses streaming SSE or non-streaming JSON responses
 // from AI model providers to extract usage, model identity, and provenance.
 type StreamMeter struct {
-	Model              string
-	PromptTokens       int
-	CompletionTokens   int
-	TotalTokens        int
-	Provenance         UsageProvenance
-	isSSE              bool
-	buffer             bytes.Buffer
-	hasCompleted       bool
+	Model               string
+	PromptTokens        int
+	CompletionTokens    int
+	TotalTokens         int
+	Provenance          UsageProvenance
+	isSSE               bool
+	buffer              bytes.Buffer
+	hasCompleted        bool
 	estimatedCompTokens int
 }
 

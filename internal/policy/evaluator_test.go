@@ -334,4 +334,3 @@ func TestMTLSPolicyEvaluation(t *testing.T) {
 		t.Fatalf("expected allowed mTLS for authorized CN, got: %+v", d4)
 	}
 }
-

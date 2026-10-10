@@ -29,7 +29,6 @@ type DeclarativeConfig = apiops.DeclarativeConfig
 type DeclAPI = apiops.DeclAPI
 type DeclPlan = apiops.DeclPlan
 
-
 // fieldHints maps common mistaken field names to the correct ones.
 var fieldHints = map[string]string{
 	"format":     `use "format_version": "1.0"`,

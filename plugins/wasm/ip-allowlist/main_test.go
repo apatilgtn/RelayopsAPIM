@@ -9,14 +9,14 @@ import (
 func TestIPAllowlist(t *testing.T) {
 	cfg := map[string]any{"allow": []string{"10.0.0.0/8", "203.0.113.7", "2001:db8::/32"}, "deny": []string{"10.6.6.0/24"}}
 	for ip, want := range map[string]string{
-		"10.1.2.3":         "allow",
-		"203.0.113.7":      "allow",
-		"::ffff:10.1.2.3":  "allow",
-		"2001:db8::1":      "allow",
-		"10.6.6.9":         "deny", // deny wins
-		"192.0.2.1":        "deny",
-		"203.0.113.8":      "deny",
-		"not-an-ip":        "deny",
+		"10.1.2.3":        "allow",
+		"203.0.113.7":     "allow",
+		"::ffff:10.1.2.3": "allow",
+		"2001:db8::1":     "allow",
+		"10.6.6.9":        "deny", // deny wins
+		"192.0.2.1":       "deny",
+		"203.0.113.8":     "deny",
+		"not-an-ip":       "deny",
 	} {
 		res := pt.Run(t, handle, pt.Input{ClientIP: ip, Config: cfg})
 		if res.Action != want {

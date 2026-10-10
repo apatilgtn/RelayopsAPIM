@@ -693,4 +693,3 @@ func TestAIBudgetEnforcement(t *testing.T) {
 		t.Fatalf("expected budget reservation to be settled after successful call")
 	}
 }
-

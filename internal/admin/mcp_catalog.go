@@ -45,8 +45,8 @@ func (s *Server) RecordMCPObservations(ctx context.Context, obs []store.MCPObser
 		}
 		s.alerts.Notify(alerts.Alert{
 			Type: "mcp_definition_" + what, Severity: "warning", Title: title, TenantID: e.TenantID,
-			Text: "Calls to it are refused on every gateway until it is approved. Review it under APIs → MCP tools or Approvals.",
-			Link: consoleLink("/#/approvals"),
+			Text:    "Calls to it are refused on every gateway until it is approved. Review it under APIs → MCP tools or Approvals.",
+			Link:    consoleLink("/#/approvals"),
 			Details: map[string]any{"api_id": e.APIID, "kind": e.Kind, "name": e.Name, "fingerprint": e.Fingerprint, "catalog_entry": e.ID},
 		})
 	}

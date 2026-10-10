@@ -31,15 +31,15 @@ type EvalTrialResult struct {
 
 // EvalSummary summarizes an evaluation run across a test suite.
 type EvalSummary struct {
-	TotalCases      int               `json:"total_cases"`
-	PassedCases     int               `json:"passed_cases"`
-	SafetyViolations int              `json:"safety_violations"`
-	PassRate        float64           `json:"pass_rate"`
-	TotalCostCents  int64             `json:"total_cost_cents"`
-	AvgLatencyMS    float64           `json:"avg_latency_ms"`
-	Qualified       bool              `json:"qualified"`
-	EvidenceDigest  string            `json:"evidence_digest"`
-	Results         []EvalTrialResult `json:"results"`
+	TotalCases       int               `json:"total_cases"`
+	PassedCases      int               `json:"passed_cases"`
+	SafetyViolations int               `json:"safety_violations"`
+	PassRate         float64           `json:"pass_rate"`
+	TotalCostCents   int64             `json:"total_cost_cents"`
+	AvgLatencyMS     float64           `json:"avg_latency_ms"`
+	Qualified        bool              `json:"qualified"`
+	EvidenceDigest   string            `json:"evidence_digest"`
+	Results          []EvalTrialResult `json:"results"`
 }
 
 // EvaluateCandidate evaluates a set of trial results against the test suite constraints.
