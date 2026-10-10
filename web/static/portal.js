@@ -173,6 +173,12 @@
       state.apis = Array.isArray(data.apis) ? data.apis : [];
       syncProtocolFilters(state.apis);
       state.plans = Array.isArray(data.plans) ? data.plans : [];
+      // The provider's public gateway address prefills code examples.
+      if (data.gateway_url) {
+        state.gatewayURL = String(data.gateway_url).replace(/\/$/, '');
+        const input = $('gateway-url');
+        if (input) { input.placeholder = state.gatewayURL; if (!input.value) input.value = state.gatewayURL; }
+      }
       state.loaded = true; state.error = '';
       $('nav-count').textContent = state.apis.length;
       $('catalog-count').textContent = state.apis.length;
@@ -422,7 +428,7 @@ print(response.json())`;
     const api = findAPI($('console-api').value);
     if (api?.auth_type === 'api_key' && !Object.keys(headers).some((name) => name.toLowerCase() === 'x-api-key')) headers['X-API-Key'] = 'YOUR_API_KEY';
     if (['jwt', 'oidc'].includes(api?.auth_type) && !Object.keys(headers).some((name) => name.toLowerCase() === 'authorization')) headers.Authorization = 'Bearer YOUR_ACCESS_TOKEN';
-    const configured = $('gateway-url').value.trim().replace(/\/$/, '') || 'http://127.0.0.1:8080';
+    const configured = $('gateway-url').value.trim().replace(/\/$/, '') || state.gatewayURL || 'http://127.0.0.1:8080';
     const path = $('try-path').value || '/your-api/endpoint';
     const url = configured + path;
     const method = $('try-method').value;

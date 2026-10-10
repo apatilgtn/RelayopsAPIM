@@ -10,10 +10,7 @@ import (
 // synthesizeOpenAPISpec creates a complete, real, standards-compliant OpenAPI 3.0.0
 // document for any API that does not already have an uploaded specification.
 func (s *Server) synthesizeOpenAPISpec(a store.API) map[string]any {
-	serverURL := s.gatewayURL
-	if serverURL == "" {
-		serverURL = "http://localhost:8080"
-	}
+	serverURL := s.consumerGatewayURL()
 	basePath := strings.TrimRight(a.BasePath, "/")
 
 	title := a.Name

@@ -364,6 +364,7 @@ Without a model, the console still shows Orbit with setup instructions, and `POS
 | `RELAYOPS_ADMIN_CLIENT_CA_FILE`, `RELAYOPS_DATAPLANE_REQUIRE_CLIENT_CERT` | (unset) | Control plane: verify client certificates, and require one for the node API |
 | `RELAYOPS_DATAPLANE_CA_FILE`, `RELAYOPS_DATAPLANE_CLIENT_CERT_FILE`, `RELAYOPS_DATAPLANE_CLIENT_KEY_FILE` | (unset) | Gateway-only nodes: trust a private CA and present a client certificate (mTLS) |
 | `RELAYOPS_GATEWAY_URL` | local proxy listener | Gateway the control plane calls for the portal workbench, MCP `invoke_api` and Test Studio; set it on control-plane nodes |
+| `RELAYOPS_PUBLIC_GATEWAY_URL` | the gateway URL above | Gateway address API consumers use, for example `https://api.example.com`. Shown as the server in published API references and prefilled in portal code examples |
 
 **Direct SQL edits** to the `apis` and `plans` tables are detected within milliseconds and published as a new revision by `direct_sql`, with an audit entry. They are served, versioned and reversible like any other change. While a canary is in flight, adoption waits until it is promoted or aborted. `GET /api/system/drift` shows whether the tables differ from the newest revision. Set `RELAYOPS_ADOPT_SQL_CHANGES=false` to require every change to go through the admin API or `relayopsctl apply`.
 

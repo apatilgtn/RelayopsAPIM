@@ -41,6 +41,24 @@ func WithGatewayURL(u string) Option {
 	}
 }
 
+// WithPublicGatewayURL is the gateway address API consumers use, for example
+// https://api.example.com. It appears in published API references and portal
+// code examples; internal callers keep using the local gateway.
+func WithPublicGatewayURL(u string) Option {
+	return func(s *Server) { s.publicGatewayURL = strings.TrimRight(u, "/") }
+}
+
+// consumerGatewayURL is the address shown to API consumers.
+func (s *Server) consumerGatewayURL() string {
+	if s.publicGatewayURL != "" {
+		return s.publicGatewayURL
+	}
+	if s.gatewayURL != "" {
+		return s.gatewayURL
+	}
+	return "http://localhost:8080"
+}
+
 // WithRunnerSecret configures the internal runner token for authorized Test Studio gateway requests.
 func WithRunnerSecret(secret string) Option {
 	return func(s *Server) {

@@ -189,6 +189,7 @@ func run() error {
 		admin.WithRunnerSecret(cfg.RunnerSecret),
 		admin.WithLicense(ent),
 		admin.WithGatewayURL(cfg.GatewayURL),
+		admin.WithPublicGatewayURL(cfg.PublicGatewayURL),
 		nodeAPIOption(cfg),
 		admin.WithAutoRollbackInterval(cfg.AutoRollbackInterval),
 		leaderOpt,

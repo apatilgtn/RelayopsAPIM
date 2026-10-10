@@ -39,6 +39,7 @@ type Config struct {
 	DataplaneToken     string // RELAYOPS_DATAPLANE_TOKEN - shared secret gateway-only nodes present to the control plane node API
 	StatusAddr         string // RELAYOPS_STATUS_ADDR - gateway-only nodes: /metrics, /healthz and /readyz listener
 	DataplaneAllowHTTP bool   // RELAYOPS_DATAPLANE_ALLOW_HTTP - allow a plain-HTTP control plane URL (local development only)
+	PublicGatewayURL   string // RELAYOPS_PUBLIC_GATEWAY_URL - gateway address API consumers use (published API references, portal examples), e.g. https://api.example.com
 	GatewayURL         string // RELAYOPS_GATEWAY_URL - gateway base URL the control plane calls (workbench, MCP, Test Studio); defaults to the local proxy listener
 
 	// Node API trust (see docs/DATAPLANE_SEPARATION_DESIGN_2026-10-09.md).
@@ -165,6 +166,7 @@ func Load() Config {
 		StatusAddr:         env("RELAYOPS_STATUS_ADDR", ":9091"),
 		DataplaneAllowHTTP: envBool("RELAYOPS_DATAPLANE_ALLOW_HTTP", false),
 		GatewayURL:         strings.TrimRight(env("RELAYOPS_GATEWAY_URL", ""), "/"),
+		PublicGatewayURL:   strings.TrimRight(env("RELAYOPS_PUBLIC_GATEWAY_URL", ""), "/"),
 
 		DataplaneAPI:               envBool("RELAYOPS_DATAPLANE_API", false),
 		DataplaneSigningKey:        strings.TrimSpace(env("RELAYOPS_DATAPLANE_SIGNING_KEY", "")),

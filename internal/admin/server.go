@@ -43,33 +43,34 @@ import (
 )
 
 type Server struct {
-	store           *store.Store
-	gw              *gateway.Gateway
-	hub             *realtime.Hub
-	alerts          *alerts.Notifier
-	heldRollbackRev atomic.Int64                             // last candidate whose unattributed spike was alerted
-	changeCache     typedMap[[2]int64, store.RevisionChange] // candidate,baseline -> what changed
-	token           string
-	nodeID          string
-	static          fs.FS
-	started         time.Time
-	regLimiter      *gateway.Limiter // IP rate limiter for portal registration abuse protection
-	regMu           sync.Mutex
-	regCounts       map[string]int
-	gatewayURL      string // local data-plane address used by the developer workbench
-	sessionMu       sync.RWMutex
-	sessions        map[string]store.AdminUser
-	jwks            *gateway.JWKSManager
-	evaluator       *policy.Evaluator
-	runnerToken     string
-	apiops          *apiops.Coordinator
-	license         license.Entitlement
-	mcpHandler      *mcp.Handler
-	dataplane       *dataplaneState // nil unless the node API for gateway-only nodes is enabled
-	apiHandler      http.Handler    // the authenticated /api stack; Orbit tools read through it
-	orbit           *orbitState     // nil unless an Orbit AI model is configured
-	signals         signalCache     // Orbit signals per credential, one minute
-	orbitStats      orbitMetrics    // Orbit usage for /metrics
+	store            *store.Store
+	gw               *gateway.Gateway
+	hub              *realtime.Hub
+	alerts           *alerts.Notifier
+	heldRollbackRev  atomic.Int64                             // last candidate whose unattributed spike was alerted
+	changeCache      typedMap[[2]int64, store.RevisionChange] // candidate,baseline -> what changed
+	token            string
+	nodeID           string
+	static           fs.FS
+	started          time.Time
+	regLimiter       *gateway.Limiter // IP rate limiter for portal registration abuse protection
+	regMu            sync.Mutex
+	regCounts        map[string]int
+	gatewayURL       string // local data-plane address used by the developer workbench
+	publicGatewayURL string // gateway address shown to API consumers (RELAYOPS_PUBLIC_GATEWAY_URL)
+	sessionMu        sync.RWMutex
+	sessions         map[string]store.AdminUser
+	jwks             *gateway.JWKSManager
+	evaluator        *policy.Evaluator
+	runnerToken      string
+	apiops           *apiops.Coordinator
+	license          license.Entitlement
+	mcpHandler       *mcp.Handler
+	dataplane        *dataplaneState // nil unless the node API for gateway-only nodes is enabled
+	apiHandler       http.Handler    // the authenticated /api stack; Orbit tools read through it
+	orbit            *orbitState     // nil unless an Orbit AI model is configured
+	signals          signalCache     // Orbit signals per credential, one minute
+	orbitStats       orbitMetrics    // Orbit usage for /metrics
 
 	autoRollbackInterval time.Duration             // 0: DefaultAutoRollbackInterval
 	elector              coordinator.LeaderElector // nil: every replica evaluates under the advisory lock
@@ -3840,8 +3841,9 @@ func (s *Server) portalCatalog(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"apis":  pub,
-		"plans": plans,
+		"apis":        pub,
+		"plans":       plans,
+		"gateway_url": s.consumerGatewayURL(),
 	})
 }
 
