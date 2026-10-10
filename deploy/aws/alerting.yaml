@@ -1,0 +1,239 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  RelayOps alerting, deployed in the instance's region. A small function
+  probes the console and gateway over HTTPS every minute and publishes a
+  health metric; alarms email after three consecutive failed minutes. EC2
+  alarms recover the instance on AWS hardware failure, reboot it when the
+  operating system stops responding, and warn on CPU saturation or exhausted
+  CPU credits. Confirm the SNS subscription email once after deployment.
+
+Parameters:
+  AlertEmail:
+    Type: String
+    Description: Address that receives alerts
+  InstanceId:
+    Type: AWS::EC2::Instance::Id
+    Description: The RelayOps EC2 instance
+  ConsoleURL:
+    Type: String
+    Default: https://console.relayops.cloud/healthz
+    Description: Console health URL; healthy when it answers 200 and reports the database healthy
+  GatewayURL:
+    Type: String
+    Default: https://api.relayops.cloud/__relayops/health
+    Description: Gateway health URL; healthy when it answers 200 with status ok
+
+Resources:
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: RelayOps alerts
+      Subscription:
+        - Protocol: email
+          Endpoint: !Ref AlertEmail
+
+  ProbeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: {Service: lambda.amazonaws.com}
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: put-health-metric
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: cloudwatch:PutMetricData
+                Resource: "*"
+                Condition:
+                  StringEquals: {"cloudwatch:namespace": "RelayOps/Endpoints"}
+
+  ProbeLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${AWS::StackName}-probe
+      RetentionInDays: 7
+
+  Probe:
+    Type: AWS::Lambda::Function
+    DependsOn: ProbeLogs
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}-probe
+      Description: Probes RelayOps endpoints and publishes RelayOps/Endpoints Healthy (1 or 0)
+      Runtime: python3.12
+      Handler: index.handler
+      Timeout: 30
+      MemorySize: 128
+      Role: !GetAtt ProbeRole.Arn
+      Environment:
+        Variables:
+          CONSOLE_URL: !Ref ConsoleURL
+          GATEWAY_URL: !Ref GatewayURL
+      Code:
+        ZipFile: |
+          import json, os, time, urllib.request
+          import boto3
+
+          cw = boto3.client("cloudwatch")
+          CHECKS = {
+              "console": (os.environ["CONSOLE_URL"], lambda b: b.get("status") == "ok" and b.get("database") == "healthy"),
+              "gateway": (os.environ["GATEWAY_URL"], lambda b: b.get("status") == "ok"),
+          }
+
+          def probe(url, healthy):
+              start = time.time()
+              try:
+                  req = urllib.request.Request(url, headers={"User-Agent": "relayops-health-probe"})
+                  with urllib.request.urlopen(req, timeout=10) as resp:
+                      body = json.loads(resp.read(65536) or b"{}")
+                      ok = resp.status == 200 and healthy(body)
+                      return ok, time.time() - start, "" if ok else json.dumps(body)[:300]
+              except Exception as exc:  # timeouts, TLS and HTTP errors all count as down
+                  return False, time.time() - start, str(exc)[:300]
+
+          def handler(event, context):
+              data, results = [], {}
+              for name, (url, healthy) in CHECKS.items():
+                  ok, seconds, detail = probe(url, healthy)
+                  results[name] = {"ok": ok, "seconds": round(seconds, 3), "detail": detail}
+                  dims = [{"Name": "Endpoint", "Value": name}]
+                  data.append({"MetricName": "Healthy", "Dimensions": dims, "Value": 1 if ok else 0, "Unit": "Count"})
+                  data.append({"MetricName": "LatencySeconds", "Dimensions": dims, "Value": seconds, "Unit": "Seconds"})
+              cw.put_metric_data(Namespace="RelayOps/Endpoints", MetricData=data)
+              print(json.dumps(results))
+              return results
+
+  ProbeSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Run the RelayOps endpoint probe every minute
+      ScheduleExpression: rate(1 minute)
+      Targets:
+        - Arn: !GetAtt Probe.Arn
+          Id: probe
+
+  ProbePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref Probe
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt ProbeSchedule.Arn
+
+  ConsoleDownAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: relayops-console-unhealthy
+      AlarmDescription: !Sub >
+        ${ConsoleURL} failed or reported the database unavailable for 3
+        minutes. Gateways keep serving their cached configuration; the
+        console, configuration changes and logging are affected.
+      Namespace: RelayOps/Endpoints
+      MetricName: Healthy
+      Dimensions: [{Name: Endpoint, Value: console}]
+      Statistic: Minimum
+      Period: 60
+      EvaluationPeriods: 3
+      Threshold: 1
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: breaching
+      AlarmActions: [!Ref AlertTopic]
+      OKActions: [!Ref AlertTopic]
+
+  GatewayDownAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: relayops-gateway-unhealthy
+      AlarmDescription: !Sub "${GatewayURL} failed for 3 minutes: API traffic is likely failing."
+      Namespace: RelayOps/Endpoints
+      MetricName: Healthy
+      Dimensions: [{Name: Endpoint, Value: gateway}]
+      Statistic: Minimum
+      Period: 60
+      EvaluationPeriods: 3
+      Threshold: 1
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: breaching
+      AlarmActions: [!Ref AlertTopic]
+      OKActions: [!Ref AlertTopic]
+
+  SystemCheckAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: relayops-instance-system-check
+      AlarmDescription: AWS hardware or network under the instance failed; the instance is being recovered onto new hardware (same IP and volumes).
+      Namespace: AWS/EC2
+      MetricName: StatusCheckFailed_System
+      Dimensions: [{Name: InstanceId, Value: !Ref InstanceId}]
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions:
+        - !Sub arn:aws:automate:${AWS::Region}:ec2:recover
+        - !Ref AlertTopic
+      OKActions: [!Ref AlertTopic]
+
+  InstanceCheckAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: relayops-instance-os-check
+      AlarmDescription: The operating system stopped responding to AWS status checks; the instance is being rebooted.
+      Namespace: AWS/EC2
+      MetricName: StatusCheckFailed_Instance
+      Dimensions: [{Name: InstanceId, Value: !Ref InstanceId}]
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 3
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions:
+        - !Sub arn:aws:automate:${AWS::Region}:ec2:reboot
+        - !Ref AlertTopic
+      OKActions: [!Ref AlertTopic]
+
+  CpuHighAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: relayops-instance-cpu-high
+      AlarmDescription: CPU above 90% for 15 minutes; latency will rise.
+      Namespace: AWS/EC2
+      MetricName: CPUUtilization
+      Dimensions: [{Name: InstanceId, Value: !Ref InstanceId}]
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 3
+      Threshold: 90
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions: [!Ref AlertTopic]
+      OKActions: [!Ref AlertTopic]
+
+  CpuCreditsLowAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: relayops-instance-cpu-credits-low
+      AlarmDescription: The burstable instance is almost out of CPU credits and will be throttled to its baseline speed.
+      Namespace: AWS/EC2
+      MetricName: CPUCreditBalance
+      Dimensions: [{Name: InstanceId, Value: !Ref InstanceId}]
+      Statistic: Minimum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 20
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+      OKActions: [!Ref AlertTopic]
+
+Outputs:
+  AlertTopicArn:
+    Value: !Ref AlertTopic
+  ProbeFunction:
+    Value: !Ref Probe
