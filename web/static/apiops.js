@@ -509,7 +509,7 @@
           const dlBtn = $('#btn-dl-passport');
           if (copyBtn) {
             copyBtn.onclick = () => {
-              navigator.clipboard.writeText(jsonStr).then(() => toast('Passport JSON copied to clipboard'));
+              window.RelayUI.copy(jsonStr).then((ok) => toast(ok ? 'Passport JSON copied' : 'Copy failed. Select the JSON and copy it manually.', ok ? 'success' : 'error'));
             };
           }
           if (dlBtn) {

@@ -1829,7 +1829,10 @@
               <div class="callout warning">Copy this token now. Only its SHA-256 hash is stored; it cannot be shown again.</div>
               <div class="secret-box">${esc(out.token)}</div>
               <div class="muted small">On the gateway: <code class="mono">RELAYOPS_NODE_ID=${esc(out.credential.node_id)}</code> and <code class="mono">RELAYOPS_DATAPLANE_TOKEN=&lt;this token&gt;</code></div>`,
-            actions: [{ label: 'Copy token', primary: true, onClick: (close) => { navigator.clipboard?.writeText(out.token); toast('Token copied', 'success'); close(); } }]
+            actions: [{ label: 'Copy token', primary: true, onClick: async (close) => {
+              if (await RelayUI.copy(out.token)) { toast('Token copied', 'success'); close(); }
+              else toast('Copy failed. Select the token and copy it manually; it is shown only once.', 'error');
+            } }]
           });
         }
       });
@@ -1977,8 +1980,7 @@
               {
                 label: 'Copy JSON',
                 onClick: (_, wrap) => {
-                  navigator.clipboard.writeText(jsonStr);
-                  toast('Configuration JSON copied to clipboard!', 'success');
+                  RelayUI.copy(jsonStr).then((ok) => toast(ok ? 'Configuration JSON copied' : 'Copy failed. Select the JSON and copy it manually.', ok ? 'success' : 'error'));
                 }
               },
               {
@@ -3229,9 +3231,13 @@
           actions: [{
             label: 'Copy Key to Clipboard',
             primary: true,
-            onClick: (close) => {
-              navigator.clipboard?.writeText(k.key);
-              toast('API key copied to clipboard!', 'success');
+            onClick: async (close) => {
+              // The key is shown only once: keep the dialog open if copying failed.
+              if (!(await RelayUI.copy(k.key))) {
+                toast('Copy failed. Select the key and copy it manually; it is shown only once.', 'error');
+                return;
+              }
+              toast('API key copied', 'success');
               close();
               renderConsumerDetail(c);
             }

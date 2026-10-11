@@ -136,9 +136,10 @@
     state.toastTimer = setTimeout(() => { $('toast').hidden = true; }, 3500);
   }
 
-  async function copy(text) {
-    try { await navigator.clipboard.writeText(text); toast('Copied to clipboard'); }
-    catch (_) { toast('Clipboard unavailable. Select and copy the text instead.'); }
+  async function copy(text, done = 'Copied to clipboard') {
+    const ok = await window.RelayUI.copy(text);
+    toast(ok ? done : 'Clipboard unavailable. Select and copy the text instead.');
+    return ok;
   }
 
   function catalogMessage(title, detail, retry = false) {
@@ -954,8 +955,7 @@ print(response.text)`;
 
   const copyMCP = () => {
     const text = $('mcp-config-preview')?.textContent || '';
-    copy(text);
-    toast('Copied MCP configuration to clipboard!', 'success');
+    copy(text, 'Copied the MCP configuration');
   };
   $('copy-mcp-config-link')?.addEventListener('click', copyMCP);
   $('copy-mcp-config-btn')?.addEventListener('click', copyMCP);
@@ -964,8 +964,7 @@ print(response.text)`;
     card.addEventListener('click', () => {
       const p = card.dataset.prompt;
       if (p) {
-        copy(p);
-        toast('Copied prompt to clipboard! Paste it into your AI assistant.', 'success');
+        copy(p, 'Copied the prompt. Paste it into your AI assistant.');
       }
     });
   });

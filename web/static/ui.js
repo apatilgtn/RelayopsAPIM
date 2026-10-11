@@ -5,7 +5,18 @@
   const icon = name => names.has(name) ? `<span class="ui-icon" aria-hidden="true" style="--icon:url('/icons/${name}.svg')"></span>` : '';
   let access = null;
   const setAccess = value => { access=value; enhance(document); };
-  window.RelayUI = Object.freeze({icon,setAccess,features:()=>access?.features||{}});
+  // copy puts text on the clipboard and reports whether it worked. Browsers
+  // can refuse the Clipboard API (permissions, non-HTTPS pages), so it falls
+  // back to a hidden textarea; callers must not claim success, or close a
+  // dialog showing a one-time secret, when it returns false.
+  const copy = async text => {
+    try { if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); return true; } } catch (_) { /* fall back */ }
+    try {
+      const ta=document.createElement('textarea');ta.value=text;ta.setAttribute('readonly','');ta.style.position='fixed';ta.style.opacity='0';
+      document.body.appendChild(ta);ta.select();const ok=document.execCommand('copy');ta.remove();return ok;
+    } catch (_) { return false; }
+  };
+  window.RelayUI = Object.freeze({icon,setAccess,copy,features:()=>access?.features||{}});
   const descriptions={live:'Monitor gateway traffic and request decisions.',analytics:'Review API usage, latency and errors from gateway request logs.',logs:'Search requests and inspect their decision trails.',apis:'Configure routes, authentication and API policies.',consumers:'Manage applications and their API credentials.',subscriptions:'Review API access and assigned plans.',plans:'Define request limits and usage quotas.',fleet:'Review impact, validate changes and release gradually.',approvals:'Review account and API access requests.',audit:'Inspect changes and their administrators.',team:'Manage workspace users and role permissions.',tenants:'Isolate APIs, plans and memberships by workspace.',providers:'Configure OpenID Connect sign-in for administrators.',ai:'Govern models, configure providers, track budgets and qualify releases.',tests:'Create and run end-to-end API test suites with gate policies.',apiops:'Manage declarative API delivery, environments, and Release Passports.',refusals:'Requests the gateway refused by policy, and why.'};
   // Stacked tables on small screens: label each cell with its column.
   function labelTables(root){

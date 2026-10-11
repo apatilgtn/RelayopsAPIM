@@ -54,7 +54,8 @@ test('publish an API, protect it with a key, and trace requests', async ({ page,
   await form.getByRole('button', { name: 'Generate Key' }).click();
   const key = (await page.locator('#raw-key').innerText()).trim();
   expect(key).toMatch(/^rk_/);
-  await page.locator('.modal footer button').last().click();
+  await page.locator('.modal footer').getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.locator('.modal')).toBeHidden();
 
   await page.getByRole('button', { name: 'Subscribe to API' }).click();
   const apiOption = form.locator('[name=api_id] option', { hasText: name });
