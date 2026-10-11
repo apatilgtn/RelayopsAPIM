@@ -283,15 +283,16 @@
         try {
           parsed = JSON.parse(val);
         } catch (e) {
-          resEl.innerHTML = `<div class="card alert"><p>JSON Parse Error: ${esc(e.message)}</p></div>`;
+          resEl.innerHTML = `<div class="callout danger"><p><strong>Not valid JSON.</strong> ${esc(e.message)}</p></div>`;
+          resEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
           return;
         }
 
         try {
           const res = await api('POST', '/api/apiops/bundles/validate', parsed);
           resEl.innerHTML = `
-            <div class="card" style="background:rgba(196,243,107,0.08); border-color:#c4f36b; padding:16px;">
-              <h4 style="color:#c4f36b; margin-top:0;">✓ Bundle is Valid</h4>
+            <div class="callout success">
+              <p><strong>Bundle is valid.</strong></p>
               <p><strong>Source Hash:</strong> <code>${esc(res.source_hash || '—')}</code></p>
               <p><strong>Rendered Hash:</strong> <code>${esc(res.rendered_hash || '—')}</code></p>
               <p><strong>Declared APIs:</strong> ${res.apis_count} | <strong>Plans:</strong> ${res.plans_count}</p>
@@ -299,12 +300,13 @@
           `;
         } catch (err) {
           resEl.innerHTML = `
-            <div class="card alert" style="padding:16px;">
-              <h4 style="margin-top:0;">✗ Validation Failed</h4>
+            <div class="callout danger">
+              <p><strong>Validation failed.</strong></p>
               <p>${esc(err.message)}</p>
             </div>
           `;
         }
+        resEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       };
     }
 

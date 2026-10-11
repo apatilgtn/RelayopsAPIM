@@ -1170,7 +1170,7 @@
           impactBtn.textContent = 'Generating Report…';
           try {
             const imp = await api('POST', `/api/apis/${a.id}/consumer-impact`, getProposed());
-            $('#preview-result', wrap).hidden = false;
+            $('#preview-result', wrap).hidden = false; $('#preview-result', wrap).scrollIntoView({ block: 'nearest', behavior: 'smooth' });
             const ibox = $('#prev-impact-box', wrap);
             ibox.hidden = false;
             const apps = imp.applications || [];
@@ -1229,7 +1229,7 @@
           runBtn.textContent = 'Evaluating…';
           try {
             const r = await api('POST', `/api/apis/${a.id}/preview-change`, getProposed());
-            $('#preview-result', wrap).hidden = false;
+            $('#preview-result', wrap).hidden = false; $('#preview-result', wrap).scrollIntoView({ block: 'nearest', behavior: 'smooth' });
             $('#prev-reqs', wrap).textContent = fmtNum(r.recent_requests || r.requests_evaluated || 0);
             $('#prev-consumers', wrap).textContent = fmtNum(r.active_consumers || (r.impacted_consumers || []).length);
             
@@ -1280,7 +1280,7 @@
           replayBtn.textContent = 'Simulating Replay…';
           try {
             const rep = await api('POST', `/api/apis/${a.id}/replay-preview`, getProposed());
-            $('#preview-result', wrap).hidden = false;
+            $('#preview-result', wrap).hidden = false; $('#preview-result', wrap).scrollIntoView({ block: 'nearest', behavior: 'smooth' });
             const rbox = $('#prev-replay-box', wrap);
             rbox.hidden = false;
             const sims = rep.simulations || [];
@@ -3143,6 +3143,16 @@
 
     if (selectedId && consumers.some((c) => c.id === selectedId)) {
       await renderConsumerDetail(consumers.find((c) => c.id === selectedId));
+      // The details render below the consumer list, which with more than a
+      // few consumers is off-screen: bring them into view and move focus.
+      const detail = $('#consumer-detail');
+      const heading = detail?.querySelector('h2');
+      if (heading && currentView === 'consumers') {
+        const smooth = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+        detail.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'start' });
+        heading.setAttribute('tabindex', '-1');
+        heading.focus({ preventScroll: true });
+      }
     }
   };
 
