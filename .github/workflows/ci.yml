@@ -89,3 +89,41 @@ jobs:
           helm template ci deploy/helm/relayops --set database.url=postgres://x@db/relayops \
             --set persistence.enabled=true --set gateway.autoscaling.enabled=true \
             --set gateway.podDisruptionBudget.enabled=true >/dev/null
+
+  e2e:
+    name: End-to-end (browser drives console, portal and gateway)
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 2s --health-timeout 5s --health-retries 30
+    env:
+      E2E_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+    defaults:
+      run:
+        working-directory: e2e
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Run end-to-end tests
+        run: npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results

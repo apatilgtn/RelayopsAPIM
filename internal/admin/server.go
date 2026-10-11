@@ -2702,6 +2702,9 @@ func (s *Server) createSub(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if in.PlanID != nil && strings.TrimSpace(*in.PlanID) == "" {
+		in.PlanID = nil // "no plan": the API's own limits apply
+	}
 	if in.PlanID != nil {
 		if _, ok := s.scopedPlan(w, r, *in.PlanID); !ok {
 			return
@@ -2748,6 +2751,9 @@ func (s *Server) updateSub(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, ok := s.scopedSub(w, r, r.PathValue("id")); !ok {
 		return
+	}
+	if in.PlanID != nil && strings.TrimSpace(*in.PlanID) == "" {
+		in.PlanID = nil // "no plan": the API's own limits apply
 	}
 	if in.PlanID != nil {
 		if _, ok := s.scopedPlan(w, r, *in.PlanID); !ok {

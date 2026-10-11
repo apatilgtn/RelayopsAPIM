@@ -1,0 +1,13 @@
+{
+  "name": "relayops-e2e",
+  "private": true,
+  "description": "End-to-end tests: a real browser drives the RelayOps console, portal and gateway",
+  "scripts": {
+    "test": "playwright test",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0",
+    "pg": "8.13.1"
+  }
+}

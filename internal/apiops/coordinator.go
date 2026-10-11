@@ -13,6 +13,11 @@ import (
 	"github.com/relayops/apim/internal/store"
 )
 
+// ErrVerificationRejected means the deployment cannot be verified yet: no
+// candidate revision, no Test Studio runs against it, or a failing run. It is
+// a precondition the user must meet, not a server error.
+var ErrVerificationRejected = errors.New("verification rejected")
+
 type PlanRequest struct {
 	EnvironmentID        string `json:"environment_id"`
 	CandidateRevision    int64  `json:"candidate_revision,omitempty"`
@@ -99,7 +104,7 @@ type verificationEvidence struct {
 func (c *Coordinator) collectEvidence(ctx context.Context, dep store.APIOpsDeployment) (*verificationEvidence, error) {
 	deploymentID := dep.ID
 	if dep.CandidateRevision <= 0 {
-		return nil, fmt.Errorf("deployment %s has no active candidate revision to verify (deploy candidate canary first)", deploymentID)
+		return nil, fmt.Errorf("%w: deployment %s has no active candidate revision to verify (deploy the candidate as a canary first)", ErrVerificationRejected, deploymentID)
 	}
 
 	// 1. Collect actual Test Studio runs executed against this candidate revision
@@ -140,15 +145,15 @@ func (c *Coordinator) collectEvidence(ctx context.Context, dep store.APIOpsDeplo
 	}
 
 	if len(runs) == 0 {
-		return nil, fmt.Errorf("verification rejected: no Test Studio runs observed against candidate rev_%d", dep.CandidateRevision)
+		return nil, fmt.Errorf("%w: no Test Studio runs observed against candidate rev_%d", ErrVerificationRejected, dep.CandidateRevision)
 	}
 
 	for _, r := range runs {
 		if r.FailedSteps > 0 || r.State != "completed" {
-			return nil, fmt.Errorf("verification rejected: test run %s for suite %s has status %s with %d failed steps", r.ID, r.SuiteID, r.State, r.FailedSteps)
+			return nil, fmt.Errorf("%w: test run %s for suite %s has status %s with %d failed steps", ErrVerificationRejected, r.ID, r.SuiteID, r.State, r.FailedSteps)
 		}
 		if r.PassedSteps == 0 {
-			return nil, fmt.Errorf("verification rejected: test run %s for suite %s passed no steps", r.ID, r.SuiteID)
+			return nil, fmt.Errorf("%w: test run %s for suite %s passed no steps", ErrVerificationRejected, r.ID, r.SuiteID)
 		}
 	}
 

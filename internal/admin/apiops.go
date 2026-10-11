@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/relayops/apim/internal/apiops"
@@ -133,6 +134,10 @@ func (s *Server) verifyAPIOpsDeployment(w http.ResponseWriter, r *http.Request) 
 	}
 
 	digest, err := s.apiops.VerifyDeployment(r.Context(), id)
+	if errors.Is(err, apiops.ErrVerificationRejected) {
+		writeErr(w, http.StatusPreconditionFailed, "verification_rejected", err.Error())
+		return
+	}
 	if err != nil {
 		s.fail(w, err)
 		return

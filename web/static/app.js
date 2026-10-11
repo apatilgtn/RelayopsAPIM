@@ -107,6 +107,24 @@
   // -------------------------------------------------------------------------
   // modal & form dialogs
   // -------------------------------------------------------------------------
+  // syncModalInert makes only the topmost dialog interactive. It is derived
+  // from the dialogs open right now, never restored from a saved state: with
+  // stacked dialogs (a form that opens a result dialog) a saved state goes
+  // stale and would leave the page unclickable after the last dialog closes.
+  function syncModalInert() {
+    const open = [...document.querySelectorAll('#modal-root>.modal-backdrop')];
+    const top = open.at(-1);
+    open.forEach((el) => { el.inert = el !== top; });
+    const workspace = document.querySelector('body>.workspace');
+    if (workspace) workspace.inert = !!top;
+    const rail = document.querySelector('body>.rail');
+    if (rail) {
+      // On phones the navigation rail is also inert while the menu is closed.
+      const closedMobileNav = matchMedia('(max-width:760px)').matches && !document.body.classList.contains('nav-open');
+      rail.inert = !!top || closedMobileNav;
+    }
+  }
+
   function openModal({ id = '', title, body, actions = [], dismissable = true, large = false, onOpen, confirmText, onConfirm, danger = false }) {
     // Shorthand used by some views: one confirm button whose handler returns
     // false to keep the dialog open (validation or a failed request).
@@ -136,9 +154,7 @@
       </div>
     `;
     const previousFocus = document.activeElement;
-    const behind = [...document.querySelectorAll('body>.rail,body>.workspace,#modal-root>.modal-backdrop')].map(el=>({el,inert:el.inert}));
-    behind.forEach(({el})=>el.inert=true);
-    const close = () => { wrap.remove(); behind.forEach(({el,inert})=>el.inert=inert); if (previousFocus?.isConnected) previousFocus.focus(); else $('#main')?.focus(); };
+    const close = () => { wrap.remove(); syncModalInert(); if (previousFocus?.isConnected) previousFocus.focus(); else $('#main')?.focus(); };
     const focusable = () => [...wrap.querySelectorAll('button:not(:disabled),a[href],input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex="0"]')].filter(el => el.getClientRects().length);
     wrap.querySelector('[data-close]')?.insertAdjacentHTML('afterbegin', RelayUI.icon('x'));
     wrap.addEventListener('click', (e) => {
@@ -158,6 +174,7 @@
       }
     });
     root.appendChild(wrap);
+    syncModalInert();
     onOpen?.(wrap);
     requestAnimationFrame(() => (wrap.querySelector('input,select,textarea') || focusable()[0])?.focus());
     close.close = close; // callers use either close() or modal.close()
@@ -3234,7 +3251,7 @@
           { name: 'plan_id', label: 'Plan & Quota', type: 'select', options: [{ value: '', label: 'No plan (use API default limits)' }, ...plans.map((p) => ({ value: p.id, label: `${p.name} (${limitText(p.rate_limit_per_minute)})` }))] }
         ],
         onSubmit: async (v) => {
-          await api('POST', '/api/subscriptions', { consumer_id: c.id, ...v });
+          await api('POST', '/api/subscriptions', { consumer_id: c.id, api_id: v.api_id, ...(v.plan_id ? { plan_id: v.plan_id } : {}) });
           toast('Subscription created and applied live!', 'success');
           renderConsumerDetail(c);
         }

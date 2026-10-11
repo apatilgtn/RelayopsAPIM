@@ -415,6 +415,21 @@ With `RELAYOPS_TEST_DATABASE_URL` set, the integration tests create and drop a t
 - tenant isolation: scoped reads, `404` across tenants, per-tenant roles, cross-tenant link rejection, platform-only operations, scoped logs, analytics and audit, per-tenant declarative apply, delegated onboarding and portal rules;
 - OIDC sign-in against a fake identity provider: PKCE, nonce, audience, expiry, domain, verified email, subject binding, single-use state, and group-driven access that is granted and revoked.
 
+**End-to-end tests.** [`e2e/`](e2e) uses Playwright to drive a real browser through the console and portal, and checks the results through the admin API and the gateway. It starts its own isolated stack: a fresh `relayops_e2e` database, the mock upstream, and RelayOps on ports 28080/29090. It covers:
+
+- sign-in, and every page at desktop and phone widths;
+- publishing an API, requiring keys, issuing a key, subscribing, and tracing allowed and refused requests;
+- access rules: no subscription, "no plan" subscriptions, suspension, and key revocation;
+- administration forms checked against what was saved;
+- APIOps, the portal, a canary that is aborted, and Orbit without a model;
+- every dialog in the console opening cleanly with a way to submit.
+
+```bash
+cd e2e && npm ci && npx playwright test    # needs Go, Node 20 and PostgreSQL (E2E_POSTGRES_URL)
+```
+
+CI runs it as a separate job on every push.
+
 **Soak testing.** `go run ./cmd/soak` drives sustained traffic across one or more gateway nodes while publishing revisions and running canary-then-promote cycles. It writes a JSON and Markdown report with latency percentiles, status codes, per-node counts and pass/fail invariants. For gateway-only latency, start the mock with `-jitter-ms 0`. Results from a local run are in [docs/evidence](docs/evidence). The PowerShell suites in `scripts/` exercise a running instance on the default ports. Run them against an empty database. `e2e.ps1` edits the `relayops` database directly with `psql`, so never point it at a database you care about. `test_advanced_features.ps1` calls NVIDIA with `RELAYOPS_SECRET_NVIDIA_API_KEY`. `test_enterprise_platform.ps1` needs the server started with the same `RELAYOPS_SSO_SECRET`.
 
 ## Project layout
