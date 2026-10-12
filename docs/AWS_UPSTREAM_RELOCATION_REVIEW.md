@@ -2,7 +2,7 @@
 
 Status: approved by the user and applied on 5 October 2026 as revision 176. A fresh plan matched the reviewed hash and contained only the 39 approved upstream_url changes. A migrated API successfully proxied to the cloud mock service; gateway readiness and Supabase health passed.
 
-The deployed console is https://console.13.210.150.88.sslip.io.
+The deployed console is https://console.relayops.cloud.
 
 Replace only the host portion `http://localhost:7070` or `http://127.0.0.1:7070` with `http://mockupstream:7070` for the 39 APIs below. Preserve URL path/query, API IDs, names, authentication, permissions, plans, subscriptions, visibility and enabled/draft states. Seven other local-only upstreams remain unchanged.
 
