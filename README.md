@@ -297,7 +297,7 @@ A target can carry its own `request_headers`, which replace the API's headers of
     - `relayops_orbit_tool_calls_total{result}`
     - `relayops_orbit_proposals_total{stage}`
 
-    Each question is also audited as `ORBIT_ASK` with model, tokens, duration and tools. Orbit's model calls go through the gateway as the `orbit-assistant` consumer, so they also appear in request logs and analytics.
+    Each question is also audited as `ORBIT_ASK` with model, tokens, duration and tools. If `RELAYOPS_ORBIT_BASE_URL` points at one of your own gateway routes, Orbit's model calls also appear in request logs and analytics; pointed straight at the provider, they are tracked by the metrics and audit entries above.
 - **Tracing.** Set `OTEL_EXPORTER_OTLP_ENDPOINT` (or `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`), plus optionally `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_SERVICE_NAME` and `OTEL_TRACES_SAMPLER_ARG`.
   - Each request gets a SERVER span, and each upstream attempt a CLIENT span.
   - Sampling is parent-based, and `traceparent` is propagated to upstreams.
