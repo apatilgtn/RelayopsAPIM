@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -35,8 +36,11 @@ type targetState struct {
 	key      string
 	apiID    string
 	rawURL   string
+	name     string
 	url      *url.URL
 	weight   atomic.Int64
+	headers  atomic.Pointer[map[string]string] // per-target request headers (secret references)
+	backup   atomic.Bool                       // used only when no primary target can serve
 	inflight atomic.Int64
 
 	healthy        atomic.Bool
@@ -67,17 +71,27 @@ func newUpstreamRegistry() *upstreamRegistry {
 	return &upstreamRegistry{states: map[string]*targetState{}}
 }
 
-func (r *upstreamRegistry) get(apiID, raw string, u *url.URL, weight int) *targetState {
-	key := apiID + "|" + raw
+func (r *upstreamRegistry) get(apiID string, t store.UpstreamTarget, u *url.URL, weight int) *targetState {
+	key := apiID + "|" + t.URL
+	if t.Name != "" {
+		key += "|" + t.Name
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	ts, ok := r.states[key]
 	if !ok {
-		ts = &targetState{key: key, apiID: apiID, rawURL: raw, url: u}
+		ts = &targetState{key: key, apiID: apiID, rawURL: t.URL, name: t.Name, url: u}
 		ts.healthy.Store(true)
 		r.states[key] = ts
 	}
 	ts.weight.Store(int64(weight))
+	ts.backup.Store(t.Backup)
+	if len(t.RequestHeaders) > 0 {
+		h := maps.Clone(t.RequestHeaders)
+		ts.headers.Store(&h)
+	} else {
+		ts.headers.Store(nil)
+	}
 	return ts
 }
 
@@ -122,7 +136,7 @@ func newUpstreamPool(a store.API, reg *upstreamRegistry) (*upstreamPool, error) 
 		if w == 0 && len(a.TrafficPolicy.Targets) == 0 {
 			w = 1
 		}
-		p.targets = append(p.targets, reg.get(a.ID, t.URL, u, w))
+		p.targets = append(p.targets, reg.get(a.ID, t, u, w))
 	}
 	return p, nil
 }
@@ -177,7 +191,7 @@ func (p *upstreamPool) acquire(t *targetState, now time.Time) bool {
 func (p *upstreamPool) pick(avoid map[*targetState]bool) (*targetState, error) {
 	now := time.Now()
 	for attempt := 0; attempt < 3; attempt++ {
-		var fresh, retried, unhealthy []*targetState
+		var fresh, backups, retried, unhealthy []*targetState
 		for _, t := range p.targets {
 			if !p.available(t, now) {
 				continue
@@ -187,11 +201,16 @@ func (p *upstreamPool) pick(avoid map[*targetState]bool) (*targetState, error) {
 				unhealthy = append(unhealthy, t)
 			case avoid[t]:
 				retried = append(retried, t)
+			case t.backup.Load():
+				backups = append(backups, t)
 			default:
 				fresh = append(fresh, t)
 			}
 		}
 		candidates := fresh
+		if len(candidates) == 0 {
+			candidates = backups
+		}
 		if len(candidates) == 0 {
 			candidates = retried
 		}
@@ -472,6 +491,7 @@ func recordProbe(t *targetState, ok bool, errMsg string, hc store.HealthCheckPol
 type TargetStatus struct {
 	APIID               string     `json:"api_id"`
 	URL                 string     `json:"url"`
+	Name                string     `json:"name,omitempty"`
 	Weight              int64      `json:"weight"`
 	Healthy             bool       `json:"healthy"`
 	Circuit             string     `json:"circuit"` // closed | open | half_open
@@ -491,7 +511,7 @@ func (g *Gateway) UpstreamStatus() []TargetStatus {
 	for _, t := range g.upstreams.snapshot() {
 		t.mu.Lock()
 		st := TargetStatus{
-			APIID: t.apiID, URL: t.rawURL, Weight: t.weight.Load(), Healthy: t.healthy.Load(),
+			APIID: t.apiID, URL: t.rawURL, Name: t.name, Weight: t.weight.Load(), Healthy: t.healthy.Load(),
 			ConsecutiveFailures: t.consecutiveFailures, InFlight: t.inflight.Load(),
 			Requests: t.requestsTotal.Load(), Failures: t.failuresTotal.Load(), Retries: t.retriesTotal.Load(),
 			CircuitOpens: t.breakerOpens.Load(), LastError: t.lastError,

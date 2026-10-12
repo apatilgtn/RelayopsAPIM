@@ -1030,6 +1030,13 @@ func (t routeTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			out.URL = targetURL(tgt.url, st.inURL, req.URL.RawQuery)
 		}
 		out.Host = ""
+		// A target's own headers (for example its credential) replace the
+		// API-level ones, so a retry on a backup target uses the backup's key.
+		if h := tgt.headers.Load(); h != nil {
+			for k, v := range *h {
+				out.Header.Set(k, config.ResolveSecrets(v))
+			}
+		}
 		rt := http.RoundTripper(base)
 		switch out.URL.Scheme {
 		case "h2c", "grpc":
@@ -1079,6 +1086,9 @@ func (t routeTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 
 		attempt := map[string]any{"attempt": i + 1, "target": tgt.rawURL, "duration_ms": elapsed}
+		if tgt.name != "" {
+			attempt["target_name"] = tgt.name
+		}
 		if rerr != nil {
 			attempt["error"] = rerr.Error()
 		} else {

@@ -144,9 +144,18 @@ func (s *Store) UpsertAIBudgetAccount(ctx context.Context, acc AIBudgetAccount) 
 	if acc.ResetDayOfMonth <= 0 {
 		acc.ResetDayOfMonth = 1
 	}
+	// One account per consumer (or per tenant when consumer_id is null): saving
+	// again changes its limits in place and never resets recorded spend.
+	conflict := `(tenant_id, consumer_id) WHERE consumer_id IS NOT NULL`
+	if acc.ConsumerID == nil {
+		conflict = `(tenant_id) WHERE consumer_id IS NULL`
+	}
 	err := s.Pool.QueryRow(ctx, `
 		INSERT INTO ai_budget_accounts (tenant_id, consumer_id, currency, monthly_budget_cents, current_spend_cents, reserved_spend_cents, strict_enforcement, reset_day_of_month)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT `+conflict+` DO UPDATE SET currency = EXCLUDED.currency,
+			monthly_budget_cents = EXCLUDED.monthly_budget_cents, strict_enforcement = EXCLUDED.strict_enforcement,
+			reset_day_of_month = EXCLUDED.reset_day_of_month, updated_at = now()
 		RETURNING id, tenant_id, consumer_id, currency, monthly_budget_cents, current_spend_cents, reserved_spend_cents, strict_enforcement, reset_day_of_month, created_at, updated_at`,
 		TenantOrDefault(acc.TenantID), acc.ConsumerID, acc.Currency, acc.MonthlyBudgetCents, acc.CurrentSpendCents, acc.ReservedSpendCents, acc.StrictEnforcement, acc.ResetDayOfMonth,
 	).Scan(&acc.ID, &acc.TenantID, &acc.ConsumerID, &acc.Currency, &acc.MonthlyBudgetCents, &acc.CurrentSpendCents, &acc.ReservedSpendCents, &acc.StrictEnforcement, &acc.ResetDayOfMonth, &acc.CreatedAt, &acc.UpdatedAt)

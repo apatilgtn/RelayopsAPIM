@@ -50,23 +50,50 @@ const (
 
 var wasmPluginName = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,62}$`)
 
+var (
+	targetName = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,39}$`)
+	headerName = regexp.MustCompile("^[A-Za-z0-9!#$%&'*+.^_`|~-]+$")
+	// A credential header may only carry a secret reference, optionally after
+	// an auth scheme, so a key is never stored in configuration.
+	secretHeaderValue = regexp.MustCompile(`^((Bearer|Basic|Token) )?\$\{secret:[A-Za-z][A-Za-z0-9_]*\}$`)
+)
+
+func sensitiveTargetHeader(name string) bool {
+	n := strings.ToLower(name)
+	return n == "authorization" || n == "proxy-authorization" || n == "cookie" ||
+		strings.Contains(n, "key") || strings.Contains(n, "token") || strings.Contains(n, "secret")
+}
+
 // UpstreamTarget is one backend instance. An omitted weight defaults to 1;
 // an explicit "weight": 0 drains the target (it receives no new traffic).
 type UpstreamTarget struct {
 	URL    string `json:"url"`
 	Weight int    `json:"weight"`
+	// Name tells targets that share a URL apart, such as one provider
+	// reached with two different credentials.
+	Name string `json:"name,omitempty"`
+	// Backup targets receive traffic only when no primary target can take
+	// it, or on the retry after a primary attempt failed or was refused.
+	Backup bool `json:"backup,omitempty"`
+	// RequestHeaders are set on requests sent to this target, replacing any
+	// API-level header of the same name. Credentials must be secret
+	// references (${secret:NAME}), never literal values.
+	RequestHeaders map[string]string `json:"request_headers,omitempty"`
 }
 
 // UnmarshalJSON applies the default weight only when the field is absent.
 func (t *UpstreamTarget) UnmarshalJSON(b []byte) error {
 	var raw struct {
-		URL    string `json:"url"`
-		Weight *int   `json:"weight"`
+		URL            string            `json:"url"`
+		Weight         *int              `json:"weight"`
+		Name           string            `json:"name"`
+		Backup         bool              `json:"backup"`
+		RequestHeaders map[string]string `json:"request_headers"`
 	}
 	if err := json.Unmarshal(b, &raw); err != nil {
 		return err
 	}
-	t.URL, t.Weight = raw.URL, 1
+	t.URL, t.Weight, t.Name, t.Backup, t.RequestHeaders = raw.URL, 1, raw.Name, raw.Backup, raw.RequestHeaders
 	if raw.Weight != nil {
 		t.Weight = *raw.Weight
 	}
@@ -160,14 +187,33 @@ func (p TrafficPolicy) Validate() error {
 		if t.Weight < 0 || t.Weight > 1000 {
 			return fmt.Errorf("traffic_policy.targets[%d].weight must be between 0 and 1000", i)
 		}
-		if seen[t.URL] {
-			return fmt.Errorf("traffic_policy.targets[%d].url %q is duplicated", i, t.URL)
+		if t.Name != "" && !targetName.MatchString(t.Name) {
+			return fmt.Errorf("traffic_policy.targets[%d].name must be 1-40 lowercase letters, digits, '-' or '_'", i)
 		}
-		seen[t.URL] = true
-		total += t.Weight
+		if seen[t.URL+"|"+t.Name] {
+			if t.Name == "" {
+				return fmt.Errorf("traffic_policy.targets[%d].url %q is duplicated (give targets that share a URL different names)", i, t.URL)
+			}
+			return fmt.Errorf("traffic_policy.targets[%d] duplicates url %q with name %q", i, t.URL, t.Name)
+		}
+		seen[t.URL+"|"+t.Name] = true
+		for h, v := range t.RequestHeaders {
+			if !headerName.MatchString(h) {
+				return fmt.Errorf("traffic_policy.targets[%d].request_headers has an invalid header name %q", i, h)
+			}
+			if sensitiveTargetHeader(h) && !secretHeaderValue.MatchString(v) {
+				return fmt.Errorf("traffic_policy.targets[%d].request_headers[%q] must be a secret reference such as \"Bearer ${secret:NAME}\", not a literal credential", i, h)
+			}
+			if t.Name == "" {
+				return fmt.Errorf("traffic_policy.targets[%d] has request_headers and needs a name", i)
+			}
+		}
+		if !t.Backup {
+			total += t.Weight
+		}
 	}
 	if len(p.Targets) > 0 && total == 0 {
-		return errors.New("traffic_policy.targets must have at least one target with weight > 0")
+		return errors.New("traffic_policy.targets must have at least one non-backup target with weight > 0")
 	}
 	if len(p.WasmPlugins) > MaxWasmPlugins {
 		return fmt.Errorf("traffic_policy.wasm_plugins supports at most %d plugins", MaxWasmPlugins)
@@ -202,9 +248,19 @@ func (p TrafficPolicy) Validate() error {
 		if r.BackoffMS < 0 || r.BackoffMS > 10_000 {
 			return errors.New("traffic_policy.retries.backoff_ms must be between 0 and 10000")
 		}
+		perTargetCredentials := false
+		for _, t := range p.Targets {
+			if len(t.RequestHeaders) > 0 {
+				perTargetCredentials = true
+			}
+		}
 		for _, s := range r.RetryOnStatus {
-			if s < 500 || s > 599 {
-				return errors.New("traffic_policy.retries.retry_on_status only accepts 5xx status codes")
+			switch {
+			case s >= 500 && s <= 599, s == 429:
+			case (s == 401 || s == 403) && perTargetCredentials:
+				// Another target may hold a credential the upstream accepts.
+			default:
+				return errors.New("traffic_policy.retries.retry_on_status accepts 5xx and 429, and 401/403 only when targets have their own request_headers")
 			}
 		}
 	}

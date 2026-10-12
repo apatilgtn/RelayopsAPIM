@@ -693,3 +693,105 @@ func TestAIBudgetEnforcement(t *testing.T) {
 		t.Fatalf("expected budget reservation to be settled after successful call")
 	}
 }
+
+// credentialUpstream refuses the primary key (as a provider does when a key's
+// quota is used up) and accepts the backup key, recording which keys it saw.
+func credentialUpstream(t *testing.T) (*httptest.Server, *[]string, *sync.Mutex) {
+	t.Helper()
+	var mu sync.Mutex
+	seen := []string{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		seen = append(seen, r.Header.Get("Authorization")+" "+string(body))
+		mu.Unlock()
+		if r.Header.Get("Authorization") == "Bearer backup-secret" {
+			w.WriteHeader(200)
+			return
+		}
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	t.Cleanup(srv.Close)
+	return srv, &seen, &mu
+}
+
+func backupCredentialAPI(url string) store.API {
+	a := testAPI("ai", "/ai", url)
+	a.RequestHeaders = map[string]string{"Authorization": "Bearer ${secret:TEST_PRIMARY_KEY}"}
+	a.TrafficPolicy = store.TrafficPolicy{
+		Targets: []store.UpstreamTarget{
+			{URL: url, Weight: 1, Name: "primary", RequestHeaders: map[string]string{"Authorization": "Bearer ${secret:TEST_PRIMARY_KEY}"}},
+			{URL: url, Weight: 1, Name: "backup", Backup: true, RequestHeaders: map[string]string{"Authorization": "Bearer ${secret:TEST_BACKUP_KEY}"}},
+		},
+		Retries: &store.RetryPolicy{Attempts: 2, BackoffMS: 1, RetryNonIdempotent: true, RetryOnStatus: []int{401, 429, 502, 503, 504}},
+	}
+	return a
+}
+
+func TestBackupCredentialTargetTakesOverWhenPrimaryIsRefused(t *testing.T) {
+	t.Setenv("RELAYOPS_SECRET_TEST_PRIMARY_KEY", "primary-secret")
+	t.Setenv("RELAYOPS_SECRET_TEST_BACKUP_KEY", "backup-secret")
+	srv, seen, mu := credentialUpstream(t)
+	g := newTestGateway(t)
+	g.load(t, store.SnapshotData{APIs: []store.API{backupCredentialAPI(srv.URL)}})
+	rec := do(g, "POST", "/ai/chat", map[string]string{"Content-Type": "application/json"}, `{"q":1}`)
+	if rec.Code != 200 {
+		t.Fatalf("status %d, want 200 from the backup credential", rec.Code)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	want := []string{`Bearer primary-secret {"q":1}`, `Bearer backup-secret {"q":1}`}
+	if len(*seen) != 2 || (*seen)[0] != want[0] || (*seen)[1] != want[1] {
+		t.Fatalf("upstream saw %q, want %q", *seen, want)
+	}
+}
+
+func TestBackupCredentialTargetIsIdleWhilePrimaryWorks(t *testing.T) {
+	t.Setenv("RELAYOPS_SECRET_TEST_PRIMARY_KEY", "backup-secret") // the primary is accepted here
+	t.Setenv("RELAYOPS_SECRET_TEST_BACKUP_KEY", "other-secret")
+	srv, seen, mu := credentialUpstream(t)
+	g := newTestGateway(t)
+	g.load(t, store.SnapshotData{APIs: []store.API{backupCredentialAPI(srv.URL)}})
+	for i := 0; i < 5; i++ {
+		if rec := do(g, "GET", "/ai/models", nil, ""); rec.Code != 200 {
+			t.Fatalf("status %d", rec.Code)
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	for _, s := range *seen {
+		if !strings.HasPrefix(s, "Bearer backup-secret") {
+			t.Fatalf("a request used %q; the backup must stay idle while the primary works", s)
+		}
+	}
+}
+
+func TestTargetCredentialValidation(t *testing.T) {
+	base := func() store.TrafficPolicy {
+		return store.TrafficPolicy{Targets: []store.UpstreamTarget{
+			{URL: "https://ai.example.com", Weight: 1, Name: "primary", RequestHeaders: map[string]string{"Authorization": "Bearer ${secret:A}"}},
+			{URL: "https://ai.example.com", Weight: 1, Name: "backup", Backup: true, RequestHeaders: map[string]string{"Authorization": "Bearer ${secret:B}"}},
+		}, Retries: &store.RetryPolicy{Attempts: 2, RetryOnStatus: []int{401, 429}}}
+	}
+	if err := base().Validate(); err != nil {
+		t.Fatalf("valid backup-credential policy rejected: %v", err)
+	}
+	literal := base()
+	literal.Targets[1].RequestHeaders = map[string]string{"Authorization": "Bearer nvapi-plaintext"}
+	if err := literal.Validate(); err == nil || !strings.Contains(err.Error(), "secret reference") {
+		t.Fatalf("literal credential accepted: %v", err)
+	}
+	unnamed := base()
+	unnamed.Targets[0].Name, unnamed.Targets[1].Name = "", ""
+	if err := unnamed.Validate(); err == nil {
+		t.Fatal("two unnamed targets with the same URL accepted")
+	}
+	noCreds := store.TrafficPolicy{Targets: []store.UpstreamTarget{{URL: "https://a.example.com", Weight: 1}}, Retries: &store.RetryPolicy{Attempts: 2, RetryOnStatus: []int{401}}}
+	if err := noCreds.Validate(); err == nil {
+		t.Fatal("retry on 401 accepted without per-target credentials")
+	}
+	only429 := store.TrafficPolicy{Targets: []store.UpstreamTarget{{URL: "https://a.example.com", Weight: 1}}, Retries: &store.RetryPolicy{Attempts: 2, RetryOnStatus: []int{429}}}
+	if err := only429.Validate(); err != nil {
+		t.Fatalf("retry on 429 rejected: %v", err)
+	}
+}

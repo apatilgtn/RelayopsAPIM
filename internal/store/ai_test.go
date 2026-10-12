@@ -170,3 +170,105 @@ func TestIntegrationAIBudgetAndManifestLifecycle(t *testing.T) {
 		t.Fatalf("unexpected manifest after qualification: %+v", list[0])
 	}
 }
+
+// Saving a consumer's budget twice must change the one account in place,
+// keeping its recorded spend, rather than adding a second account that the
+// gateway might enforce instead.
+func TestIntegrationAIBudgetUpsertUpdatesInPlace(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	c, err := st.CreateConsumer(ctx, Consumer{TenantID: DefaultTenantID, Name: "budget-upsert", Email: "budget-upsert@example.com", Status: "active"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := st.UpsertAIBudgetAccount(ctx, AIBudgetAccount{TenantID: DefaultTenantID, ConsumerID: &c.ID, MonthlyBudgetCents: 100, StrictEnforcement: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.ReserveAIBudget(ctx, first.ID, "req-upsert-1", 60); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SettleAIBudget(ctx, "req-upsert-1", 60); err != nil {
+		t.Fatal(err)
+	}
+	second, err := st.UpsertAIBudgetAccount(ctx, AIBudgetAccount{TenantID: DefaultTenantID, ConsumerID: &c.ID, MonthlyBudgetCents: 300, StrictEnforcement: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.ID != first.ID {
+		t.Fatalf("second save created a new account %s (first %s)", second.ID, first.ID)
+	}
+	if second.MonthlyBudgetCents != 300 || second.CurrentSpendCents != 60 {
+		t.Fatalf("budget=%d spend=%d, want 300 and 60 (spend kept)", second.MonthlyBudgetCents, second.CurrentSpendCents)
+	}
+	got, err := st.GetAIBudgetAccountByConsumer(ctx, DefaultTenantID, c.ID)
+	if err != nil || got.ID != first.ID {
+		t.Fatalf("lookup returned %v, %v", got, err)
+	}
+	all, err := st.ListAIBudgetAccounts(ctx, DefaultTenantID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, a := range all {
+		if a.ConsumerID != nil && *a.ConsumerID == c.ID {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("consumer has %d budget accounts, want 1", n)
+	}
+}
+
+// Migration 028 must merge duplicate accounts into the one with the highest
+// spend and carry pending reservations over, as production had four
+// accounts for one consumer.
+func TestIntegrationAIBudgetMigrationMergesDuplicates(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	c, err := st.CreateConsumer(ctx, Consumer{TenantID: DefaultTenantID, Name: "budget-dupes", Email: "budget-dupes@example.com", Status: "active"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.Pool.Exec(ctx, `DROP INDEX ai_budget_accounts_consumer_uidx; DROP INDEX ai_budget_accounts_tenant_wide_uidx`); err != nil {
+		t.Fatal(err)
+	}
+	ids := make([]string, 0, 4)
+	for _, spend := range []int64{49, 27, 2, 99} {
+		var id string
+		if err := st.Pool.QueryRow(ctx, `INSERT INTO ai_budget_accounts (tenant_id, consumer_id, monthly_budget_cents, current_spend_cents) VALUES ($1,$2,100,$3) RETURNING id`, DefaultTenantID, c.ID, spend).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, id)
+	}
+	// A pending reservation on a duplicate that will be removed.
+	if _, err := st.Pool.Exec(ctx, `INSERT INTO ai_budget_reservations (account_id, request_id, reserved_cents) VALUES ($1,'req-dupe',5)`, ids[0]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.Pool.Exec(ctx, `UPDATE ai_budget_accounts SET reserved_spend_cents = 5 WHERE id = $1`, ids[0]); err != nil {
+		t.Fatal(err)
+	}
+	sql, err := migrationFS.ReadFile("migrations/028_ai_budget_one_account.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.Pool.Exec(ctx, string(sql)); err != nil {
+		t.Fatalf("migration 028: %v", err)
+	}
+	var n int
+	var keptID string
+	var spend, reserved int64
+	if err := st.Pool.QueryRow(ctx, `SELECT count(*), min(id::text), min(current_spend_cents), min(reserved_spend_cents) FROM ai_budget_accounts WHERE consumer_id=$1`, c.ID).Scan(&n, &keptID, &spend, &reserved); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 || keptID != ids[3] || spend != 99 || reserved != 5 {
+		t.Fatalf("after merge: accounts=%d kept=%s (want %s) spend=%d (want 99) reserved=%d (want 5)", n, keptID, ids[3], spend, reserved)
+	}
+	var resAccount string
+	if err := st.Pool.QueryRow(ctx, `SELECT account_id::text FROM ai_budget_reservations WHERE request_id='req-dupe'`).Scan(&resAccount); err != nil || resAccount != ids[3] {
+		t.Fatalf("reservation moved to %q (%v), want %s", resAccount, err, ids[3])
+	}
+	if _, err := st.UpsertAIBudgetAccount(ctx, AIBudgetAccount{TenantID: DefaultTenantID, ConsumerID: &c.ID, MonthlyBudgetCents: 300}); err != nil {
+		t.Fatalf("upsert after migration: %v", err)
+	}
+}

@@ -261,14 +261,35 @@ PUT /api/admin/oidc-providers/corp
 - **Retries** cover connection errors and the listed statuses, and move to an untried target first. Only idempotent methods are retried, unless `retry_non_idempotent` is set. Bodies up to 1 MiB are replayed, and larger bodies are sent once.
 - **Circuit breaker.** A target opens after `failure_threshold` consecutive failures (connection errors or 502/503/504). After `open_seconds` a single probe is let through. When every target is open the gateway returns `503 upstream_circuit_open` without calling the upstream.
 - **Health checks** take unhealthy targets out of rotation. If every target is unhealthy, traffic still flows (panic mode) rather than failing everything.
+- **Weight 0** drains a target: it receives no traffic.
 - **Live state** for this node: `GET /api/upstreams/health`.
+
+### Backup credentials (provider failover)
+
+A target can carry its own `request_headers`, which replace the API's headers of the same name, and can be marked `backup`. A backup target is used only when no primary target can serve, or on the retry after a primary attempt was refused. This keeps an AI route working when its main provider key hits a rate limit or quota:
+
+```json
+"traffic_policy": {
+  "targets": [
+    {"url": "https://integrate.api.nvidia.com", "name": "primary",
+     "request_headers": {"Authorization": "Bearer ${secret:NVIDIA_API_KEY}"}},
+    {"url": "https://integrate.api.nvidia.com", "name": "backup", "backup": true,
+     "request_headers": {"Authorization": "Bearer ${secret:NVIDIA_API_KEY_BACKUP}"}}
+  ],
+  "retries": {"attempts": 2, "retry_non_idempotent": true, "retry_on_status": [401, 429, 502, 503, 504]}
+}
+```
+
+- **Credentials** in `request_headers` must be secret references (`${secret:NAME}`, optionally after `Bearer`, `Basic` or `Token`), never literal keys.
+- **Targets sharing a URL** need different `name`s; each keeps its own health and circuit state, and metrics carry a `target_name` label.
+- **Retry statuses.** `429` is always allowed in `retry_on_status`. `401` and `403` are allowed only when targets have their own `request_headers`, since only then can another attempt succeed.
 
 ## Observability
 
 - **Prometheus** (`GET :9090/metrics`):
   - `relayops_requests_total{status}` and `relayops_request_duration_seconds_bucket|sum|count`.
   - `relayops_config_revision`, `relayops_canary_revision`, `relayops_fleet_converged` and `relayops_fleet_nodes_count`.
-  - `relayops_upstream_target_healthy`, `relayops_upstream_circuit_open` and `relayops_upstream_{requests,failures,retries,circuit_opens}_total{api_id,target}`.
+  - `relayops_upstream_target_healthy`, `relayops_upstream_circuit_open` and `relayops_upstream_{requests,failures,retries,circuit_opens}_total{api_id,target,target_name}`.
   - Orbit AI, when configured:
     - `relayops_orbit_questions_total{outcome}`
     - `relayops_orbit_tokens_total{model,kind}`
