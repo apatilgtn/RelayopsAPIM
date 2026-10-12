@@ -1,13 +1,13 @@
 name: relayops
 services:
-  relayops:
+  relayops: &relayops
     build:
       context: ../..
       dockerfile: Dockerfile
     image: relayops:local
     restart: unless-stopped
     env_file: .env
-    environment:
+    environment: &relayops-env
       RELAYOPS_REDIS_URL: redis://redis:6379/0
       RELAYOPS_ADMIN_ADDR: ':9090'
       RELAYOPS_PROXY_ADDR: ':8080'
@@ -22,11 +22,24 @@ services:
         condition: service_healthy
     security_opt:
       - no-new-privileges:true
+    stop_grace_period: 20s
     logging:
       driver: json-file
       options:
         max-size: 10m
         max-file: '3'
+  # Runs only during a deploy (zero-downtime-deploy.sh), on the new version, so
+  # traffic has somewhere to go while the primary restarts.
+  relayops-standby:
+    <<: *relayops
+    build: !reset null
+    profiles: [standby]
+    restart: 'no'
+    environment:
+      <<: *relayops-env
+      RELAYOPS_NODE_ID: aws-standby-01
+    volumes:
+      - ./data/standby:/home/nonroot/data
   redis:
     image: redis:7-alpine
     restart: unless-stopped

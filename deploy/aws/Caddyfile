@@ -2,14 +2,31 @@
   email {$ACME_EMAIL}
 }
 
+# Traffic goes to the primary node. During a deploy (zero-downtime-deploy.sh)
+# a standby node on the new version runs alongside it: while the primary
+# restarts, requests that cannot reach it are retried on the standby, so
+# neither the console nor API traffic sees an outage. Outside a deploy the
+# standby does not exist and is simply unhealthy.
+(failover) {
+  lb_policy first
+  lb_try_duration 20s
+  lb_try_interval 250ms
+  fail_duration 5s
+  health_interval 2s
+  health_timeout 2s
+  flush_interval -1
+}
+
 {$CONSOLE_DOMAIN} {
-  reverse_proxy relayops:9090 {
-    flush_interval -1
+  reverse_proxy relayops:9090 relayops-standby:9090 {
+    import failover
+    health_uri /healthz
   }
 }
 
 {$API_DOMAIN} {
-  reverse_proxy relayops:8080 {
-    flush_interval -1
+  reverse_proxy relayops:8080 relayops-standby:8080 {
+    import failover
+    health_uri /__relayops/health
   }
 }
