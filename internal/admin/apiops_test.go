@@ -86,16 +86,15 @@ func TestIntegrationAPIOpsEndpoints(t *testing.T) {
 	suiteID := suiteMap["id"].(string)
 	tenantID := suiteMap["tenant_id"].(string)
 
-	now := time.Now().UTC()
-	err := st.Pool.QueryRow(context.Background(), `
-		INSERT INTO test_runs (suite_id, tenant_id, lifecycle_state, actual_revision, total_steps, passed_steps, failed_steps, skipped_steps, completed_at)
-		VALUES ($1, $2, 'completed', $3, 2, 2, 0, 0, $4)
-		RETURNING id`,
-		suiteID, tenantID, candRev, now,
-	).Scan(new(string))
-	if err != nil {
-		t.Fatalf("record test run in test fixture: %v", err)
+	// Incomplete, unbound fabricated rows cannot qualify a release.
+	var apiID string
+	if err := st.Pool.QueryRow(context.Background(), `SELECT id FROM apis WHERE name='users-api'`).Scan(&apiID); err != nil {
+		t.Fatal(err)
 	}
+	if _, err := st.Pool.Exec(context.Background(), `UPDATE test_suites SET api_id=$1 WHERE id=$2`, apiID, suiteID); err != nil {
+		t.Fatal(err)
+	}
+	seedReleaseEvidence(t, st, tenantID, apiID, suiteID, candRev)
 
 	// 5. Plan Deployment bound to the Candidate Canary Revision
 	planReq := fmt.Sprintf(`{
@@ -137,7 +136,7 @@ func TestIntegrationAPIOpsEndpoints(t *testing.T) {
 	}
 
 	// 8. Promote Deployment (Generates and seals Release Passport atomically)
-	promoteReq := `{"override_reason":"pre-verified staging test suite passed"}`
+	promoteReq := `{"reviewed":true}`
 	promoteRes := platform.must("POST", "/api/apiops/deployments/"+depID+"/promote", promoteReq, 200)
 	if promoteRes["status"] != "promoted" {
 		t.Fatalf("expected promoted status, got %v", promoteRes)
@@ -156,7 +155,7 @@ func TestIntegrationAPIOpsEndpoints(t *testing.T) {
 		t.Fatalf("expected commit_sha to match, got %v", manifest["commit_sha"])
 	}
 	// The passport carries the server-collected verification evidence.
-	if d, _ := manifest["verification_evidence_digest"].(string); d == "" {
+	if d, _ := manifest["gate_report"].(map[string]any); d == nil {
 		t.Fatalf("passport manifest has no verification evidence: %v", manifest)
 	}
 	if passportRes["created_at"] == nil || passportRes["created_at"] == "" {
@@ -209,10 +208,10 @@ func TestIntegrationAPIOpsPromotionBoundaries(t *testing.T) {
 	}
 
 	// Platform admin: no verification evidence for the candidate, no promotion.
-	planned2 := platform.must("POST", "/api/apiops/deployments/plan", fmt.Sprintf(`{"environment_id":"%s","candidate_revision":%d,"commit_sha":"c0ffee2","branch":"main","expected_base_revision":0}`, env["id"], candRev), 201)
+	planned2 := platform.in("acme").must("POST", "/api/apiops/deployments/plan", fmt.Sprintf(`{"environment_id":"%s","candidate_revision":%d,"commit_sha":"c0ffee2","branch":"main","expected_base_revision":0}`, env["id"], candRev), 201)
 	dep2 := planned2["deployment"].(map[string]any)["id"].(string)
-	rec := platform.do("POST", "/api/apiops/deployments/"+dep2+"/promote", `{}`)
-	if rec.Code != 412 || !strings.Contains(rec.Body.String(), "no Test Studio runs") {
+	rec := platform.do("POST", "/api/apiops/deployments/"+dep2+"/promote", `{"reviewed":true}`)
+	if rec.Code != 412 || !strings.Contains(rec.Body.String(), "required suite evidence") {
 		t.Fatalf("promotion without evidence: %d %s (want 412)", rec.Code, rec.Body)
 	}
 	var status string

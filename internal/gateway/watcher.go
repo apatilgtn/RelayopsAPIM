@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/relayops/apim/internal/config"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sync/atomic"
 	"time"
@@ -68,7 +70,7 @@ var unsafeFileChars = regexp.MustCompile(`[^A-Za-z0-9._-]`)
 // directory must never read each other's cache: a standard node could otherwise
 // start serving a canary node's configuration during a database outage.
 func (w *Watcher) cacheFile() string {
-	return "data/last_known_good_config." + unsafeFileChars.ReplaceAllString(w.gw.NodeID(), "_") + ".json"
+	return filepath.Join(config.DataDirectory(), "last_known_good_config."+unsafeFileChars.ReplaceAllString(w.gw.NodeID(), "_")+".json")
 }
 
 // loadCachedSnapshot reads this node's cache, falling back to the legacy shared
@@ -76,7 +78,7 @@ func (w *Watcher) cacheFile() string {
 func (w *Watcher) loadCachedSnapshot() (store.SnapshotData, string, error) {
 	path := w.cacheFile()
 	raw, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
+	if errors.Is(err, os.ErrNotExist) && os.Getenv("RELAYOPS_ENV") != "production" {
 		path = legacyCacheFile
 		raw, err = os.ReadFile(path)
 	}
@@ -145,10 +147,13 @@ func (w *Watcher) Reload(ctx context.Context, reason string) error {
 	// Persist last-known-good configuration for disconnected gateway operation resilience.
 	// The cache holds key hashes and API auth settings, so only this user may read it.
 	if !fromCache {
-		_ = os.MkdirAll("data", 0755)
 		if raw, err := w.encodeCache(data); err == nil {
-			_ = os.WriteFile(w.cacheFile(), raw, 0600)
-			_ = os.WriteFile(legacyCacheFile, raw, 0600) // kept for operators and tooling; never read when the node's own cache exists
+			if err := writeRecoveryCache(w.cacheFile(), raw); err != nil {
+				slog.Error("persistent recovery cache write failed", "err", err)
+			}
+			if os.Getenv("RELAYOPS_ENV") != "production" {
+				_ = writeRecoveryCache(legacyCacheFile, raw)
+			}
 		}
 	}
 	ev := ReloadEvent{
@@ -177,6 +182,34 @@ func (w *Watcher) Reload(ctx context.Context, reason string) error {
 		}
 	}
 	return nil
+}
+
+func writeRecoveryCache(path string, raw []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(filepath.Dir(path), ".config-*")
+	if err != nil {
+		return err
+	}
+	name := f.Name()
+	defer os.Remove(name)
+	if err = f.Chmod(0600); err != nil {
+		f.Close()
+		return err
+	}
+	if _, err = f.Write(raw); err != nil {
+		f.Close()
+		return err
+	}
+	if err = f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
+	if err = f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(name, path)
 }
 
 // heartbeat re-sends the last acknowledgement so the node stays visible in

@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"log/slog"
@@ -35,6 +36,23 @@ func main() {
 		}
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "preflight" {
+		cfg := config.Load()
+		issues := cfg.ProductionChecks()
+		if err := cfg.Validate(); err != nil && len(issues) == 0 {
+			issues = append(issues, err.Error())
+		}
+		if len(issues) == 0 {
+			if err := cfg.CheckRecoveryStorage(); err != nil {
+				issues = append(issues, err.Error())
+			}
+		}
+		_ = json.NewEncoder(os.Stdout).Encode(map[string]any{"ready": len(issues) == 0, "environment": cfg.Environment, "issues": issues})
+		if len(issues) > 0 {
+			os.Exit(1)
+		}
+		return
+	}
 	if err := run(); err != nil {
 		slog.Error("fatal", "err", err)
 		os.Exit(1)
@@ -44,6 +62,9 @@ func main() {
 func run() error {
 	cfg := config.Load()
 	if err := cfg.Validate(); err != nil {
+		return err
+	}
+	if err := cfg.CheckRecoveryStorage(); err != nil {
 		return err
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -91,6 +112,9 @@ func run() error {
 				slog.Warn("Vault unavailable; using supplied environment fallback")
 			} else {
 				cfg = config.Load()
+				if err := cfg.Validate(); err != nil {
+					return err
+				}
 				slog.Info("hosted configuration loaded", "values", count)
 			}
 		}
@@ -193,7 +217,7 @@ func run() error {
 		nodeAPIOption(cfg),
 		admin.WithAutoRollbackInterval(cfg.AutoRollbackInterval),
 		leaderOpt,
-		admin.WithRuntimeInfo(admin.RuntimeInfo{Role: cfg.Role, LogSampleRate: cfg.LogSampleRate}),
+		admin.WithRuntimeInfo(admin.RuntimeInfo{Environment: cfg.Environment, ProductionReady: len(cfg.ProductionChecks()) == 0, Role: cfg.Role, LogSampleRate: cfg.LogSampleRate}),
 		admin.WithAlertWebhook(cfg.AlertWebhookURL),
 		admin.WithOrbit(orbit.Config{BaseURL: cfg.OrbitBaseURL, Model: cfg.OrbitModel, APIKey: cfg.OrbitAPIKey, FallbackModel: cfg.OrbitFallbackModel}),
 	)

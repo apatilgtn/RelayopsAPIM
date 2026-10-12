@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/relayops/apim/internal/store"
@@ -107,67 +106,17 @@ func (c *Coordinator) collectEvidence(ctx context.Context, dep store.APIOpsDeplo
 		return nil, fmt.Errorf("%w: deployment %s has no active candidate revision to verify (deploy the candidate as a canary first)", ErrVerificationRejected, deploymentID)
 	}
 
-	// 1. Collect actual Test Studio runs executed against this candidate revision
-	rows, err := c.store.Pool.Query(ctx, `
-		SELECT r.id, r.suite_id, r.lifecycle_state, r.passed_steps, r.failed_steps, r.skipped_steps, r.completed_at
-		FROM test_runs r
-		WHERE r.tenant_id = $1 AND r.actual_revision = $2
-		ORDER BY r.created_at DESC`, dep.TenantID, dep.CandidateRevision)
+	report, err := c.store.EvaluateTestGates(ctx, dep.CandidateRevision)
 	if err != nil {
-		return nil, fmt.Errorf("query test runs: %w", err)
-	}
-	defer rows.Close()
-
-	type runSummary struct {
-		ID          string    `json:"id"`
-		SuiteID     string    `json:"suite_id"`
-		State       string    `json:"state"`
-		PassedSteps int       `json:"passed_steps"`
-		FailedSteps int       `json:"failed_steps"`
-		CompletedAt time.Time `json:"completed_at"`
-	}
-
-	var runs []runSummary
-	for rows.Next() {
-		var r runSummary
-		var comp *time.Time
-		var skipped int
-		if err := rows.Scan(&r.ID, &r.SuiteID, &r.State, &r.PassedSteps, &r.FailedSteps, &skipped, &comp); err != nil {
-			return nil, err
-		}
-		if comp != nil {
-			r.CompletedAt = *comp
-		}
-		runs = append(runs, r)
-	}
-	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-
-	if len(runs) == 0 {
-		return nil, fmt.Errorf("%w: no Test Studio runs observed against candidate rev_%d", ErrVerificationRejected, dep.CandidateRevision)
+	if !report.Enforced || !report.Eligible || len(report.Suites) == 0 {
+		return nil, fmt.Errorf("%w: required suite evidence is missing or ineligible: %v", ErrVerificationRejected, report.Reasons)
 	}
-
-	for _, r := range runs {
-		if r.FailedSteps > 0 || r.State != "completed" {
-			return nil, fmt.Errorf("%w: test run %s for suite %s has status %s with %d failed steps", ErrVerificationRejected, r.ID, r.SuiteID, r.State, r.FailedSteps)
-		}
-		if r.PassedSteps == 0 {
-			return nil, fmt.Errorf("%w: test run %s for suite %s passed no steps", ErrVerificationRejected, r.ID, r.SuiteID)
-		}
-	}
-
-	// 2. Compute canonical server-derived evidence digest over actual test runs
 	evidencePayload := map[string]any{
-		"deployment_id":   dep.ID,
-		"tenant_id":       dep.TenantID,
-		"commit_sha":      dep.CommitSHA,
-		"plan_hash":       dep.PlanHash,
-		"candidate_rev":   dep.CandidateRevision,
-		"verified_at":     time.Now().UTC().Format(time.RFC3339),
-		"test_runs_count": len(runs),
-		"test_runs":       runs,
-		"verification_ok": true,
+		"deployment_id": dep.ID, "tenant_id": dep.TenantID, "commit_sha": dep.CommitSHA,
+		"plan_hash": dep.PlanHash, "candidate_rev": dep.CandidateRevision,
+		"verification_ok": true, "gate_report": report,
 	}
 
 	raw, err := json.Marshal(evidencePayload)
@@ -197,7 +146,7 @@ func (c *Coordinator) PromoteDeployment(ctx context.Context, deploymentID string
 		return nil, fmt.Errorf("deployment %s does not have an active candidate revision to promote", deploymentID)
 	}
 
-	allowOverride := isSuperadmin && strings.TrimSpace(overrideReason) != ""
+	allowOverride := false
 	if overrideReason != "" && !isSuperadmin {
 		return nil, fmt.Errorf("forbidden: superadmin role is required to override test gate policies")
 	}
@@ -206,7 +155,7 @@ func (c *Coordinator) PromoteDeployment(ctx context.Context, deploymentID string
 	// the server, for the revision being promoted. Only an authorized,
 	// recorded override promotes without it.
 	ev, evErr := c.collectEvidence(ctx, dep)
-	if evErr != nil && !allowOverride {
+	if evErr != nil {
 		return nil, evErr
 	}
 

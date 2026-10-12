@@ -162,6 +162,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /portal/", s.servePortal)
 	mux.HandleFunc("GET /portal/assets/{name}", s.servePortalAsset)
 	mux.HandleFunc("GET /portal/api/catalog", s.portalCatalog)
+	mux.HandleFunc("GET /portal/api/connection/{id}", s.consumerConnection)
 	mux.HandleFunc("POST /portal/api/register", s.portalRegister)
 	mux.HandleFunc("POST /portal/api/try", s.portalTry)
 
@@ -172,6 +173,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /portal/api/keys/{id}/rotate", s.portalRotateKey)
 	mux.HandleFunc("POST /portal/api/keys/{id}/retire", s.portalRetireKey)
 	mux.HandleFunc("GET /portal/api/subscriptions", s.portalListSubs)
+	mux.HandleFunc("POST /portal/api/subscriptions", s.requestConsumerSubscription)
 	mux.HandleFunc("GET /portal/api/usage", s.portalUsage)
 	mux.HandleFunc("GET /portal/api/apis/{id}/openapi.json", s.portalAPIOpenAPISpec)
 
@@ -216,6 +218,17 @@ func (s *Server) Handler() http.Handler {
 	api.HandleFunc("DELETE /api/admin/users/{id}", s.deleteAdminUser)
 	api.HandleFunc("POST /api/admin/users/{id}/revoke-sessions", s.revokeAdminUserSessions)
 
+	// Guided release drafts are independent of live configuration.
+	api.HandleFunc("GET /api/audit/archives/export", s.exportAuditArchive)
+	api.HandleFunc("POST /api/audit/archives/{id}/purge", s.purgeAuditArchive)
+	api.HandleFunc("GET /api/release-drafts", s.listReleaseDrafts)
+	api.HandleFunc("POST /api/release-drafts", s.saveReleaseDraft)
+	api.HandleFunc("PUT /api/release-drafts/{id}", s.saveReleaseDraft)
+	api.HandleFunc("GET /api/release-drafts/{id}/journey", s.releaseJourney)
+	api.HandleFunc("POST /api/release-drafts/{id}/plan", s.planReleaseDraft)
+	api.HandleFunc("POST /api/release-drafts/{id}/canary", s.canaryReleaseDraft)
+	api.HandleFunc("POST /api/release-drafts/{id}/decide/{action}", s.decideReleaseDraft)
+	api.HandleFunc("GET /api/release-drafts/{id}/evidence", s.exportReleaseDraft)
 	// APIs
 	api.HandleFunc("GET /api/apis", s.listAPIs)
 	api.HandleFunc("POST /api/apis", s.createAPI)
@@ -244,8 +257,9 @@ func (s *Server) Handler() http.Handler {
 	api.HandleFunc("GET /api/revisions/{id}/release-report", s.getReleaseReport)
 	api.HandleFunc("POST /api/revisions/{id}/rollback", s.rollbackRevision)
 	api.HandleFunc("POST /api/revisions/{id}/canary", s.deployCanary)
-	api.HandleFunc("POST /api/revisions/{id}/promote", s.promoteRevision)
+	api.HandleFunc("POST /api/revisions/{id}/promote", s.requireReleaseReview(s.promoteRevision))
 	api.HandleFunc("GET /api/revisions/{id}/canary-status", s.getCanaryStatus)
+	api.HandleFunc("GET /api/revisions/{id}/evidence", s.exportRevisionEvidence)
 	api.HandleFunc("POST /api/revisions/{id}/abort", s.abortCanary)
 	api.HandleFunc("GET /api/upstreams/health", s.upstreamHealth)
 	api.HandleFunc("GET /api/revisions/auto-rollback/config", s.getAutoRollbackConfig)
@@ -367,7 +381,7 @@ func (s *Server) Handler() http.Handler {
 	api.HandleFunc("GET /api/apiops/deployments", s.listAPIOpsDeployments)
 	api.HandleFunc("GET /api/apiops/deployments/{id}", s.getAPIOpsDeployment)
 	api.HandleFunc("POST /api/apiops/deployments/{id}/verify", s.verifyAPIOpsDeployment)
-	api.HandleFunc("POST /api/apiops/deployments/{id}/promote", s.promoteAPIOpsDeployment)
+	api.HandleFunc("POST /api/apiops/deployments/{id}/promote", s.requireReleaseReview(s.promoteAPIOpsDeployment))
 	api.HandleFunc("POST /api/apiops/deployments/{id}/abort", s.abortAPIOpsDeployment)
 	api.HandleFunc("GET /api/apiops/deployments/{id}/passport", s.getAPIOpsPassport)
 	api.HandleFunc("GET /api/apiops/environments", s.listAPIOpsEnvironments)
@@ -3818,6 +3832,7 @@ func (s *Server) portalCatalog(w http.ResponseWriter, r *http.Request) {
 		RequireApproval    bool           `json:"require_approval"`
 		OpenAPISpec        map[string]any `json:"openapi_spec,omitempty"`
 		Tenant             string         `json:"tenant"`
+		TenantID           string         `json:"tenant_id"`
 		Protocol           string         `json:"protocol"`
 	}
 
@@ -3831,6 +3846,7 @@ func (s *Server) portalCatalog(w http.ResponseWriter, r *http.Request) {
 			}
 			pub = append(pub, PublicAPI{
 				Tenant:             slugOf[a.TenantID],
+				TenantID:           a.TenantID,
 				ID:                 a.ID,
 				Name:               a.Name,
 				Description:        a.Description,
@@ -3882,6 +3898,7 @@ func (s *Server) portalRegister(w http.ResponseWriter, r *http.Request) {
 		Name   string   `json:"name"`
 		Email  string   `json:"email"`
 		APIIDs []string `json:"api_ids"`
+		PlanID *string  `json:"plan_id"`
 	}
 	if !decode(w, r, &in) {
 		return
@@ -3909,23 +3926,13 @@ func (s *Server) portalRegister(w http.ResponseWriter, r *http.Request) {
 		}
 		requested = append(requested, api)
 	}
-	c, err := s.store.CreateConsumer(r.Context(), store.Consumer{
-		TenantID:       tenant,
-		Name:           in.Name,
-		Email:          in.Email,
-		Status:         "active",
-		RegistrationIP: ip,
-	})
-	if err != nil {
-		s.fail(w, err)
-		return
+	if in.PlanID != nil {
+		plan, err := s.store.GetPlan(r.Context(), *in.PlanID)
+		if err != nil || plan.TenantID != tenant {
+			writeErr(w, 400, "invalid_plan", "choose a plan belonging to this API tenant")
+			return
+		}
 	}
-	key, err := s.store.CreateAPIKey(r.Context(), c.ID, "portal-key")
-	if err != nil {
-		s.fail(w, err)
-		return
-	}
-
 	plans, _ := s.store.ListPlans(r.Context())
 	var freePlanID *string
 	for _, p := range plans {
@@ -3936,14 +3943,17 @@ func (s *Server) portalRegister(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	hasPending := false
-	for _, api := range requested {
-		if api.RequireApproval {
-			hasPending = true
-			_, _ = s.store.CreateSubscriptionWithStatus(r.Context(), c.ID, api.ID, freePlanID, "pending", false)
-		} else {
-			_, _ = s.store.CreateSubscriptionWithStatus(r.Context(), c.ID, api.ID, freePlanID, "approved", true)
-		}
+	if in.PlanID != nil {
+		freePlanID = in.PlanID
+	}
+	ids := make([]string, 0, len(requested))
+	for _, a := range requested {
+		ids = append(ids, a.ID)
+	}
+	c, key, hasPending, err := s.store.RegisterPortalApplication(r.Context(), store.Consumer{TenantID: tenant, Name: in.Name, Email: in.Email, Status: "active", RegistrationIP: ip}, ids, freePlanID)
+	if err != nil {
+		s.fail(w, err)
+		return
 	}
 
 	msg := "Registration complete. Copy your API key now."
@@ -3960,6 +3970,7 @@ func (s *Server) portalRegister(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) portalTry(w http.ResponseWriter, r *http.Request) {
 	var in struct {
+		APIID   string            `json:"api_id"`
 		Method  string            `json:"method"`
 		Path    string            `json:"path"`
 		Headers map[string]string `json:"headers"`
@@ -4002,6 +4013,26 @@ func (s *Server) portalTry(w http.ResponseWriter, r *http.Request) {
 		respHeaders[k] = resp.Header.Get(k)
 	}
 
+	// A successful onboarding milestone requires an authenticated developer,
+	// an approved subscription, and a call to the selected API's gateway route.
+	if in.APIID != "" && resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		dev, authErr := s.authenticateDeveloper(r)
+		api, apiErr := s.store.GetAPI(r.Context(), in.APIID)
+		keyMatches := false
+		for name, raw := range in.Headers {
+			if strings.EqualFold(name, "X-API-Key") {
+				owner, e := s.store.GetConsumerByRawKey(r.Context(), raw)
+				keyMatches = e == nil && owner.ID == dev.ID
+			}
+		}
+		if authErr == nil && apiErr == nil && (api.AuthType != "api_key" || keyMatches) && api.Enabled && !api.IsDraft && api.Visibility == "public" && resp.Header.Get("X-RelayOps-API-ID") == api.ID && dev.ID != "admin" && (in.Path == api.BasePath || strings.HasPrefix(in.Path, strings.TrimRight(api.BasePath, "/")+"/")) {
+			_, err = s.store.Pool.Exec(r.Context(), `INSERT INTO consumer_connections(consumer_id,api_id,request_id) SELECT $1,$2,$3 WHERE EXISTS(SELECT 1 FROM subscriptions WHERE consumer_id=$1 AND api_id=$2 AND status='approved' AND active=true) ON CONFLICT DO NOTHING`, dev.ID, api.ID, resp.Header.Get("X-Request-ID"))
+			if err != nil {
+				s.fail(w, err)
+				return
+			}
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":  resp.StatusCode,
 		"headers": respHeaders,
@@ -4456,9 +4487,8 @@ func (s *Server) qualifyAIReleaseManifest(w http.ResponseWriter, r *http.Request
 	}
 
 	// A server-executed evaluation run (POST /api/ai/evals/runs) is verified
-	// here and its results are used; the caller's scores are ignored. Any other
-	// run ID is reported by the caller, and the evidence says so.
-	evidenceSource := "caller_attested"
+	// here and its results are used; caller scores and external IDs cannot qualify.
+	evidenceSource := "server_verified"
 	run, err := s.verifiedEvalRun(r.Context(), manifest, in.EvalRunID)
 	if err != nil {
 		writeErr(w, http.StatusPreconditionFailed, "evaluation_not_qualifying", err.Error())
@@ -4470,7 +4500,7 @@ func (s *Server) qualifyAIReleaseManifest(w http.ResponseWriter, r *http.Request
 			in.QualityScore = v
 		}
 		if v, ok := run.Summary["avg_latency_ms"].(float64); ok {
-			in.LatencyP95MS = v // the run records the mean; there is no p95 for a small suite
+			in.LatencyP95MS = v // compatibility input is ignored; output labels this as mean latency
 		}
 	}
 	evidencePayload := map[string]any{
@@ -4479,7 +4509,7 @@ func (s *Server) qualifyAIReleaseManifest(w http.ResponseWriter, r *http.Request
 		"service_id":      manifest.ServiceID,
 		"eval_run_id":     in.EvalRunID,
 		"quality_score":   in.QualityScore,
-		"latency_p95_ms":  in.LatencyP95MS,
+		"avg_latency_ms":  in.LatencyP95MS,
 		"evidence_source": evidenceSource,
 		"qualified_at":    time.Now().UTC().Format(time.RFC3339),
 		"qualified_by":    s.getActor(r),
@@ -4500,7 +4530,7 @@ func (s *Server) qualifyAIReleaseManifest(w http.ResponseWriter, r *http.Request
 		"eval_run_id":     in.EvalRunID,
 		"evidence_source": evidenceSource,
 		"quality_score":   in.QualityScore,
-		"latency_p95_ms":  in.LatencyP95MS,
+		"avg_latency_ms":  in.LatencyP95MS,
 	})
 	writeJSON(w, http.StatusOK, map[string]string{
 		"status":          "qualified",

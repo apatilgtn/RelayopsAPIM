@@ -452,18 +452,11 @@
             Promoting seals the release into an immutable <strong>Release Passport</strong>.
             All enforced Test Gate policies must pass before promotion can succeed.
           </p>
-          <div class="field">
-            <label for="promote-override">Override reason (superadmins, optional)</label>
-            <input id="promote-override" class="input" style="width:100%;" placeholder="Required only if bypassing a failed or pending test gate">
-          </div>
         `,
         confirmText: 'Promote and seal passport',
         onConfirm: async () => {
-          const override = $('#promote-override').value.trim();
           try {
-            const res = await api('POST', `/api/apiops/deployments/${deploymentID}/promote`, {
-              override_reason: override
-            });
+            const res = await api('POST', `/api/apiops/deployments/${deploymentID}/promote`, { reviewed: true });
             toast('Deployment successfully promoted and sealed');
             modal.close();
             if (onSuccess) onSuccess();

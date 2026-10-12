@@ -134,11 +134,9 @@ func TestIntegrationAIEvaluationRunQualifiesManifest(t *testing.T) {
 		t.Fatalf("qualify with a failing run: %d %s", rec.Code, rec.Body)
 	}
 
-	// An external run ID is still accepted, labelled as caller-attested.
-	ext := platform.must("POST", "/api/ai/releases/qualify/"+manifest.ID, `{"eval_run_id":"external-run-42","quality_score":0.95}`, 200)
-	if ext["evidence_source"] != "caller_attested" {
-		t.Fatalf("external run: %v", ext)
-	}
+	// External attestations and fabricated IDs never set qualified status.
+	platform.must("POST", "/api/ai/releases/qualify/"+manifest.ID, `{"eval_run_id":"external-run-42","quality_score":0.95}`, 412)
+	platform.must("POST", "/api/ai/releases/qualify/"+manifest.ID, `{"eval_run_id":"00000000-0000-4000-8000-000000000099","quality_score":0.95}`, 412)
 
 	// The console lists runs newest first.
 	if runs := platform.list("/api/ai/evals/runs"); len(runs) != 2 || runs[0]["id"] != bad["id"] {

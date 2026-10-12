@@ -8,7 +8,7 @@ import (
 )
 
 func TestIntegrationStudioGateBindings(t *testing.T) {
-	for _, scenario := range []string{"passing", "missing-suite", "expired", "changed-suite", "changed-environment", "rotated-credential", "changed-ignore-rules", "latest-failed", "old-comparison-engine", "standard-with-comparison-policy", "override"} {
+	for _, scenario := range []string{"passing", "missing-suite", "expired", "changed-suite", "changed-environment", "rotated-credential", "changed-ignore-rules", "latest-failed", "newer-incomplete", "old-comparison-engine", "standard-with-comparison-policy", "override"} {
 		t.Run(scenario, func(t *testing.T) {
 			s := openTestStore(t)
 			ctx := context.Background()
@@ -79,6 +79,8 @@ func TestIntegrationStudioGateBindings(t *testing.T) {
 				_, err = s.Pool.Exec(ctx, `UPDATE test_credentials SET credential_version=credential_version+1`)
 			case "changed-ignore-rules":
 				_, err = s.Pool.Exec(ctx, `UPDATE test_runs SET immutable_inputs=immutable_inputs || '{"ignore_paths":["/result"]}'::jsonb`)
+			case "newer-incomplete":
+				_, err = s.CreateTestRun(ctx, TestRun{SuiteID: lastRun.SuiteID, ActualRevision: rev, Mode: "standard", LifecycleState: "queued", TotalSteps: 1})
 			case "latest-failed", "override":
 				err = s.RecordTestGateEvidence(ctx, TestGateEvidence{APIID: &api.ID, Revision: rev, RunID: &lastRun.ID, TargetFingerprint: lastRun.SuiteContentHash, Eligible: false})
 			}
@@ -86,7 +88,7 @@ func TestIntegrationStudioGateBindings(t *testing.T) {
 				t.Fatal(err)
 			}
 			reasons, err := s.PromoteCanaryWithTestGates(ctx, rev, scenario == "override")
-			wantPass := scenario == "passing" || scenario == "override"
+			wantPass := scenario == "passing"
 			if wantPass && err != nil {
 				t.Fatal(err)
 			}

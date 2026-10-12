@@ -3,6 +3,7 @@ name: ci
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
 
 permissions:
@@ -79,6 +80,10 @@ jobs:
       - name: Image contains the server and CLI
         run: |
           docker run --rm --entrypoint /usr/local/bin/relayopsctl relayops:ci help >/dev/null
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-binaries
+          path: bin/linux/
       - uses: azure/setup-helm@v4
       - name: Lint and render chart (HPA and PDB validated)
         run: |
@@ -127,3 +132,84 @@ jobs:
           path: |
             e2e/playwright-report
             e2e/test-results
+
+  security:
+    name: Vulnerabilities and dependency inventory
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Go vulnerability analysis
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+          govulncheck ./...
+      - name: Build scan target
+        run: |
+          for c in relayops relayopsctl mockupstream relayops-secrets; do
+            CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o bin/linux/$c ./cmd/$c
+          done
+          docker build -t relayops:security .
+      - uses: aquasecurity/trivy-action@0.35.0
+        with:
+          image-ref: relayops:security
+          format: json
+          output: container-vulnerabilities.json
+          exit-code: '1'
+          severity: HIGH,CRITICAL
+          scanners: vuln
+      - uses: anchore/sbom-action@v0
+        with:
+          image: relayops:security
+          format: spdx-json
+          output-file: relayops.spdx.json
+          upload-artifact: false
+      - name: Dependency inventory
+        if: always()
+        run: go list -m -json all > dependencies.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-evidence
+          path: |
+            container-vulnerabilities.json
+            relayops.spdx.json
+            dependencies.json
+
+  signed-release:
+    name: Prepare signed draft release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [test, package, e2e, security]
+    runs-on: ubuntu-24.04
+    environment: enterprise-release
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-binaries
+          path: release/bin
+      - uses: actions/download-artifact@v4
+        with:
+          name: security-evidence
+          path: release/evidence
+      - uses: sigstore/cosign-installer@v3
+      - name: Package and sign exact artifacts
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          tar -czf release/relayops-linux-amd64.tar.gz -C release/bin .
+          cd release
+          sha256sum relayops-linux-amd64.tar.gz evidence/*.json > SHA256SUMS
+          cosign sign-blob --yes --bundle SHA256SUMS.sigstore.json SHA256SUMS
+      - name: Upload reviewable draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" --draft --verify-tag --title "$RELEASE_TAG" \
+            --notes-file docs/enterprise/RELEASE_REVIEW.md \
+            release/relayops-linux-amd64.tar.gz release/SHA256SUMS release/SHA256SUMS.sigstore.json release/evidence/*.json

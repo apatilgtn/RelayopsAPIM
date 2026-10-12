@@ -313,11 +313,11 @@ func truncate(s string, n int) string {
 // qualify is an error.
 func (s *Server) verifiedEvalRun(ctx context.Context, manifest store.AIReleaseManifest, evalRunID string) (*store.AIEvalRun, error) {
 	if !uuidPattern.MatchString(evalRunID) {
-		return nil, nil
+		return nil, errors.New("a server-executed evaluation run is required")
 	}
 	run, err := s.store.GetAIEvalRun(ctx, evalRunID)
 	if errors.Is(err, store.ErrNotFound) {
-		return nil, nil
+		return nil, errors.New("a server-executed evaluation run is required")
 	}
 	if err != nil {
 		return nil, err

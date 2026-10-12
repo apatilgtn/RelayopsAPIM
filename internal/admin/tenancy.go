@@ -107,6 +107,9 @@ func (s *Server) resolveTenantScope(r *http.Request, user store.AdminUser) (stor
 		}
 		t, err := s.store.GetTenantBySlug(r.Context(), slug)
 		if err != nil {
+			t, err = s.store.GetTenant(r.Context(), slug)
+		}
+		if err != nil {
 			return user, platform, http.StatusBadRequest, fmt.Errorf("unknown tenant %q", slug)
 		}
 		return user, tenantScope{Platform: true, TenantIDs: []string{t.ID}, WriteTenant: t.ID, Tenant: &t}, 0, nil
@@ -115,7 +118,7 @@ func (s *Server) resolveTenantScope(r *http.Request, user store.AdminUser) (stor
 	sc := tenantScope{Memberships: memberships}
 	if slug != "" {
 		for _, m := range memberships {
-			if m.TenantSlug == slug {
+			if m.TenantSlug == slug || m.TenantID == slug {
 				t := store.Tenant{ID: m.TenantID, Slug: m.TenantSlug, Name: m.TenantName}
 				sc.TenantIDs, sc.WriteTenant, sc.Tenant = []string{m.TenantID}, m.TenantID, &t
 				user.Role = m.Role

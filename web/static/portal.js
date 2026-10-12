@@ -2,6 +2,9 @@
 (() => {
   'use strict';
   const $ = (id) => document.getElementById(id);
+  let developerKey = '';
+  localStorage.removeItem('relayops_portal_key');
+  localStorage.removeItem('relayops_last_key');
   const methods = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options'];
   const state = { apis: [], plans: [], filter: 'all', loaded: false, error: '', response: '', toastTimer: null };
   const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -118,7 +121,7 @@
 
   async function fetchJSON(url, options = {}) {
     const headers = { ...(options.headers || {}) };
-    const savedKey = localStorage.getItem('relayops_portal_key') || localStorage.getItem('relayops_last_key');
+    const savedKey = developerKey;
     if (savedKey && !headers['X-Developer-Key'] && !headers['Authorization']) {
       headers['X-Developer-Key'] = savedKey;
     }
@@ -161,7 +164,7 @@
     }
     $('catalog-grid').innerHTML = apis.map((api) => {
       const kind = apiKind(api);
-      return `<article class="api-card"><div class="card-top"><span class="api-icon ${kind.cls}" aria-hidden="true">${RelayUI.icon(kind.icon)}</span><span class="tag ${kind.cls}">${kind.label}</span></div><h3>${esc(api.openapi_spec?.info?.title || api.name)}</h3><p class="${api.description || specDescription(api) ? '' : 'muted'}">${esc(api.description || specDescription(api) || 'No description yet.')}</p><div class="api-path" title="${esc(api.base_path)}">${esc(api.base_path)}</div><div class="card-meta"><span>${esc(authName(api))}</span><span>·</span><span>${referenceSummary(api)}</span>${api.require_approval ? '<span>Approval required</span>' : ''}</div><div class="card-actions"><a href="${link('reference', api.id)}">View reference </a><a href="${link('console', api.id)}">Try a request </a></div></article>`;
+      return `<article class="api-card"><div class="card-top"><span class="api-icon ${kind.cls}" aria-hidden="true">${RelayUI.icon(kind.icon)}</span><span class="tag ${kind.cls}">${kind.label}</span></div><h3>${esc(api.openapi_spec?.info?.title || api.name)}</h3><p class="${api.description || specDescription(api) ? '' : 'muted'}">${esc(api.description || specDescription(api) || 'No description yet.')}</p><div class="api-path" title="${esc(api.base_path)}">${esc(api.base_path)}</div><div class="card-meta"><span>${esc(authName(api))}</span><span>·</span><span>${referenceSummary(api)}</span>${api.require_approval ? '<span>Approval required</span>' : ''}</div><div class="card-actions"><a href="${link('reference', api.id)}">View reference </a><a href="${link('connect', api.id)}">Get connected </a></div></article>`;
     }).join('');
   }
 
@@ -369,7 +372,7 @@ print(response.json())`;
             <div><span>Subscription</span><strong>${api.require_approval ? 'Approval required' : 'No approval required'}</strong></div>
           </div>
           <p>Your subscription plan can override the API’s limits.</p>
-          <a class="button" href="${link('console', api.id)}">Try a request </a>
+          <a class="button" href="${link('connect', api.id)}">Get connected </a>
         </aside>
       </div>`;
 
@@ -512,7 +515,7 @@ print(response.text)`;
       $('response-status').textContent = 'SENDING'; $('response-status').className = 'tag';
       $('copy-response').disabled = true;
       const start = performance.now();
-      const data = await fetchJSON('/portal/api/try', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ method: $('try-method').value, path, headers, body: ['GET', 'HEAD'].includes($('try-method').value) ? '' : $('try-body').value }) });
+      const data = await fetchJSON('/portal/api/try', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ api_id: $('console-api').value, method: $('try-method').value, path, headers, body: ['GET', 'HEAD'].includes($('try-method').value) ? '' : $('try-body').value }) });
       $('response-time').textContent = `${Math.round(performance.now() - start)} ms · round trip`;
       $('response-status').textContent = String(data.status || 'Unknown');
       $('response-status').className = 'tag ' + (data.status >= 400 ? 'error' : 'success');
@@ -521,6 +524,9 @@ print(response.text)`;
       $('res-body').textContent = state.response;
       $('res-headers').textContent = pretty(data.headers || {});
       $('copy-response').disabled = false;
+      const guidance = {401:'Check your key or identity token.',403:'Check subscription approval and permissions.',429:'Wait for the limit to reset or review your plan.'};
+      if (data.status >= 400) toast(guidance[data.status] || 'The upstream could not complete the request. Review the response with your API owner.');
+      if (findAPI($('console-api').value)) $('auth-help').innerHTML += ` <a href="${link('connect', $('console-api').value)}?step=7">Return to connection progress</a>`;
     } catch (error) {
       $('request-error').textContent = error.name === 'TimeoutError' ? 'The request timed out. Check your gateway and upstream service.' : error.message;
       $('request-error').hidden = false;
@@ -549,7 +555,7 @@ print(response.text)`;
         activeConsumer = data.consumer;
         localStorage.setItem('relayops_consumer', JSON.stringify(data.consumer));
       }
-      localStorage.setItem('relayops_last_key', data.api_key);
+      developerKey = data.api_key;
       const api = ids.map(findAPI).find((api) => api?.auth_type === 'api_key') || findAPI(ids[0]);
       if (api) prepareRequest(api);
       $('reg-result').focus(); updateCurl();
@@ -557,7 +563,8 @@ print(response.text)`;
     finally { button.disabled = false; button.textContent = 'Register application '; }
   }
 
-  let activeConsumer = JSON.parse(localStorage.getItem('relayops_consumer') || 'null');
+  let activeConsumer = null;
+  try { activeConsumer = JSON.parse(localStorage.getItem('relayops_consumer') || 'null'); } catch (_) { localStorage.removeItem('relayops_consumer'); }
 
   async function renderMyApps() {
     if (!activeConsumer) {
@@ -619,7 +626,7 @@ print(response.text)`;
 
     // 3. Keys & Zero-Downtime Rotation
     const keyEl = $('keys-list');
-    const storedKey = localStorage.getItem('relayops_last_key');
+    const storedKey = null;
     keyEl.innerHTML = `
       <div class="card" style="padding:14px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -641,7 +648,7 @@ print(response.text)`;
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ grace_hours: 168 })
         });
-        localStorage.setItem('relayops_last_key', res.new_key);
+        developerKey = res.new_key;
         $('try-key').value = res.new_key;
         updateCurl();
         toast('Key rotated with zero downtime!', 'success');
@@ -682,7 +689,7 @@ print(response.text)`;
     }));
     $('use-total').textContent = number(data.total_requests);
     $('use-errs').textContent = number(data.error_requests);
-    $('use-lat').textContent = (data.avg_latency_ms || 0).toFixed(1) + ' ms';
+    $('use-lat').textContent = Number(data.average_latency ?? data.avg_latency_ms ?? 0).toFixed(1) + ' ms';
 
     const logs = data.recent_logs || [];
     const tbody = $('usage-log-body');
@@ -708,8 +715,7 @@ print(response.text)`;
   function getActiveKey() {
     return $('mcp-custom-key')?.value.trim() ||
       $('reg-key')?.value.trim() ||
-      localStorage.getItem('relayops_portal_key') ||
-      localStorage.getItem('relayops_last_key') ||
+      developerKey ||
       'YOUR_API_KEY';
   }
 
@@ -815,7 +821,7 @@ print(response.text)`;
   function renderMCP() {
     const sel = $('mcp-app-select');
     if (sel && sel.options.length <= 1) {
-      const savedKey = localStorage.getItem('relayops_portal_key') || localStorage.getItem('relayops_last_key');
+      const savedKey = developerKey;
       if (savedKey) {
         const opt = document.createElement('option');
         opt.value = savedKey;
@@ -828,10 +834,60 @@ print(response.text)`;
     updateMCPConfig();
   }
 
+  const connectionSelections = new Map();
+  let oneTimeConnectionKey = '';
+  async function renderConnection(id, step = 1) {
+    const root = $('view-connect'), api = findAPI(id);
+    if (!api) { root.innerHTML = '<h1>Choose an API to get connected</h1><p>Start with a published API from the catalog.</p><a class="button primary" href="#catalog">Discover APIs</a>'; return; }
+    const steps = ['Discover', 'Review requirements', 'Choose plan', 'Register app', 'Get access', 'First request', 'Monitor usage'];
+    step = Math.min(7, Math.max(1, step));
+    let access = null, unavailable = '';
+    if (developerKey) {
+      try { access = await fetchJSON('/portal/api/connection/' + encodeURIComponent(id)); activeConsumer = access.consumer; }
+      catch (e) { unavailable = e.message; }
+    }
+    if (!location.hash.startsWith(link('connect', id))) return;
+    const go = (n) => `${link('connect', id)}?step=${n}`;
+    const plans = state.plans.filter(p => p.tenant_id === api.tenant_id);
+    const selected = connectionSelections.get(id) || '';
+    const title = api.openapi_spec?.info?.title || api.name;
+    const savedKey = oneTimeConnectionKey; oneTimeConnectionKey = '';
+    let body = '';
+    if (step === 1) body = `<h2>Discover ${esc(title)}</h2><p>${esc(api.description || specDescription(api) || 'Explore the published contract before connecting.')}</p><p><code>${esc(api.base_path)}</code> · ${esc(referenceSummary(api))}</p><a class="text-link" href="${link('reference', id)}">Read published documentation</a>`;
+    if (step === 2) body = `<h2>Know the requirements</h2><dl><dt>Authentication</dt><dd>${esc(authName(api))}</dd><dt>Rate limit</dt><dd>${api.rate_limit_per_minute > 0 ? number(api.rate_limit_per_minute) + ' requests / minute' : 'No API-level limit published; plan limits may apply'}</dd><dt>Daily quota</dt><dd>${api.quota_per_day > 0 ? number(api.quota_per_day) + ' requests' : 'Check the selected plan'}</dd><dt>Access policy</dt><dd>${api.require_approval ? 'Administrator approval is required before calling this API.' : 'Access is granted immediately after registration.'}</dd></dl><p>Keep application credentials in your server’s secret store. A developer key manages your application; JWT/OIDC APIs also require a token from the published identity provider.</p>`;
+    if (step === 3) body = `<h2>Choose your plan</h2><p>Prices and limits below are published by this API owner. Registration follows the API’s approval policy.</p><label for="connect-plan">Available plans</label><select id="connect-plan"><option value="">API default plan</option>${plans.map(p => `<option value="${esc(p.id)}" ${p.id === selected ? 'selected' : ''}>${esc(p.name)} · ${esc(p.rate_limit_per_minute || 'API default')} req/min · ${esc(p.quota_per_day || 'API default')} / day</option>`).join('')}</select><div class="callout">${plans.map(p => `<p><b>${esc(p.name)}</b>: ${esc(p.description || 'Contact the API owner for commercial terms.')} ${esc(p.price_monthly_usd != null ? p.price_monthly_usd + ' / month' : '')}</p>`).join('') || 'No separate plans published. The API’s limits apply.'}</div>`;
+    if (step === 4) body = access ? `<h2>Continue with ${esc(access.consumer.name)}</h2><p>Your application is identified by the developer key held in this browser tab.</p>${access.subscription_status === 'not_requested' ? '<button class="button primary" id="connect-subscribe">Request this API</button>' : '<p>Subscription: ' + esc(access.subscription_status) + '</p>'}` : `<h2>Register your application</h2><form id="connect-register"><label for="connect-name">Application name</label><input id="connect-name" required maxlength="120" autocomplete="organization"><label for="connect-email">Contact email</label><input id="connect-email" type="email" required autocomplete="email"><p>${api.require_approval ? 'Your request will await administrator approval.' : 'Your subscription will be approved immediately.'} Plan: ${esc(plans.find(p => p.id === selected)?.name || 'API default')}.</p><label><input type="checkbox" required> I reviewed the authentication, limits, and subscription terms.</label><button class="button primary" type="submit">Register and request access</button></form>`;
+    if (step === 5) body = `<h2>${access?.access_ready ? 'Access ready' : access?.subscription_status === 'pending' ? 'Awaiting approval' : 'Access is not ready'}</h2>${savedKey ? `<label for="connect-key">New application key — shown once</label><input id="connect-key" type="password" readonly value="${esc(savedKey)}" autocomplete="off"><button class="button" id="connect-copy">Copy key</button><p>Save it in your secret store now. It will disappear when you leave or refresh this screen.</p>` : ''}<p>${access?.access_ready ? 'Your approved subscription is active. Prepare your first authorized request.' : access?.subscription_status === 'pending' ? 'Your API owner must approve the subscription. A generated key alone does not grant access.' : 'Register an application or resume using your existing developer key.'}</p><button class="button" id="connect-refresh">Refresh access status</button>`;
+    if (step === 6) body = `<h2>Make your first request</h2><p>Choose a published operation in the API workbench, fill its parameters, and explicitly send the request. No request is sent automatically.</p>${access?.access_ready ? `<a class="button primary" href="${link('console', id)}">Prepare request</a>` : `<a class="button" href="${go(5)}">Resolve access first</a>`}<p>401: check credentials. 403: check approval and permissions. 429: wait for quota reset or review your plan. 5xx: review the upstream response with your API owner.</p>`;
+    if (step === 7) body = `<h2>${access?.first_success_at ? 'You are connected' : 'First authorized request not yet recorded'}</h2><p>${access?.first_success_at ? 'Gateway success recorded at ' + esc(new Date(access.first_success_at).toLocaleString()) : 'Setup completes only after an approved application receives a successful gateway response for this API.'}</p><a class="button" href="${go(6)}">First request</a> <button class="button" id="connect-refresh">Refresh progress</button>${access?.first_success_at ? ' <a class="button primary" href="#usage">Monitor application usage</a>' : ''}`;
+    root.innerHTML = `<span class="eyebrow">GET CONNECTED · ${step} / 7</span><h1>${esc(title)}</h1><p class="lead">One API. One application. A clear path to your first request.</p><nav class="connection-steps" aria-label="Connection steps">${steps.map((name, i) => `<a href="${go(i + 1)}" ${step === i + 1 ? 'aria-current="step"' : ''}><span>${i + 1}</span> ${name}</a>`).join('')}</nav><div class="register-layout"><div class="panel">${body}<p id="connect-error" role="alert" class="form-error" hidden></p>${step < 7 && step !== 4 ? `<a class="button primary" href="${go(step + 1)}">${step === 5 ? 'Continue to first request' : 'Continue'}</a>` : step === 4 && access ? `<a class="button" href="${go(5)}">Review access</a>` : ''}</div><aside class="info-card"><span class="eyebrow">YOUR CONNECTION</span><h3>${esc(access?.consumer.name || 'Application not identified')}</h3><p>${esc(authName(api))}</p><p role="status">${unavailable ? 'Unavailable: ' + esc(unavailable) : access ? 'Subscription: ' + esc(access.subscription_status) : 'Not started · Register or resume'}</p><a href="${link('reference', id)}">Published API reference</a><hr><form id="connect-resume"><label for="connect-existing">Resume with developer key</label><input id="connect-existing" type="password" required autocomplete="off"><button class="button" type="submit">Load application</button></form><p class="field-help">Keys stay in this tab’s memory. Enter your securely stored key again after refresh.</p></aside></div>`;
+    const stepNav = root.querySelector('.connection-steps'), currentStep = stepNav?.querySelector('[aria-current=step]');
+    if (currentStep && stepNav.scrollWidth > stepNav.clientWidth) stepNav.scrollLeft += currentStep.getBoundingClientRect().left - stepNav.getBoundingClientRect().left - (stepNav.clientWidth - currentStep.offsetWidth) / 2;
+    const error = e => { $('connect-error').textContent = e.message; $('connect-error').hidden = false; };
+    $('connect-plan')?.addEventListener('change', e => connectionSelections.set(id, e.target.value));
+    $('connect-refresh')?.addEventListener('click', () => renderConnection(id, step));
+    $('connect-copy')?.addEventListener('click', () => copy(savedKey, 'Key copied. Store it securely.'));
+    $('connect-resume').onsubmit = async e => { e.preventDefault(); developerKey = $('connect-existing').value.trim(); $('try-key').value = developerKey; await renderConnection(id, step); };
+    $('connect-register')?.addEventListener('submit', async e => {
+      e.preventDefault(); const button = e.target.querySelector('button'); button.disabled = true;
+      try {
+        const data = await fetchJSON('/portal/api/register', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:$('connect-name').value.trim(), email:$('connect-email').value.trim(), api_ids:[id], plan_id:selected || null})});
+        developerKey = data.api_key; oneTimeConnectionKey = data.api_key; activeConsumer = data.consumer; $('try-key').value = data.api_key;
+        localStorage.setItem('relayops_consumer', JSON.stringify(data.consumer)); location.hash = go(5);
+      } catch (e) { error(e); button.disabled = false; }
+    });
+    $('connect-subscribe')?.addEventListener('click', async e => {
+      e.target.disabled = true;
+      try { await fetchJSON('/portal/api/subscriptions', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({api_id:id, plan_id:selected || null})}); location.hash = go(5); }
+      catch (e) { error(e); renderConnection(id, step); }
+    });
+  }
+
   function route(scroll = true) {
-    let [view, encoded] = location.hash.slice(1).split('/');
+    const [routePath, routeQuery] = location.hash.slice(1).split('?');
+    let [view, encoded] = routePath.split('/');
     let id = ''; try { id = decodeURIComponent(encoded || ''); } catch (_) { /* Invalid links fall back to not found. */ }
-    if (!['catalog', 'reference', 'guide', 'console', 'register', 'myapps', 'usage', 'mcp'].includes(view)) view = 'catalog';
+    if (!['catalog', 'reference', 'guide', 'console', 'register', 'myapps', 'usage', 'mcp', 'connect'].includes(view)) view = 'catalog';
     document.querySelectorAll('.view').forEach((el) => { el.hidden = el.id !== 'view-' + view; });
     document.querySelectorAll('[data-nav]').forEach((el) => {
       const active = el.dataset.nav === (view === 'reference' ? 'catalog' : view);
@@ -841,9 +897,10 @@ print(response.text)`;
     const title = {
       catalog: 'API catalog', reference: 'API reference', guide: 'Getting started',
       console: 'API workbench', register: 'Get access', myapps: 'My apps & keys', usage: 'Usage & logs',
-      mcp: 'Connect AI & IDE (MCP)'
+      connect: 'Get connected', mcp: 'Connect AI & IDE (MCP)'
     }[view];
     $('page-label').textContent = title; document.title = `${title} · RelayOps Developer Hub`;
+    if (view === 'connect') renderConnection(id, Number(new URLSearchParams(routeQuery).get('step')) || 1);
     if (view === 'reference') renderReference(id);
     if (view === 'console' && findAPI(id)) prepareRequest(findAPI(id));
     if (view === 'register' && findAPI(id)) document.querySelectorAll('[name="reg-api"]').forEach((input) => { input.checked = input.value === id; });

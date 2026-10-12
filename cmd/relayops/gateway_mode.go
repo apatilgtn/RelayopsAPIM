@@ -269,7 +269,7 @@ func enableSpool(c *analytics.Collector, cfg config.Config) {
 	if cfg.LogSpoolMB <= 0 {
 		return
 	}
-	spoolPath := "data/request_log_spool." + unsafeFileChars.ReplaceAllString(cfg.NodeID, "_") + ".jsonl"
+	spoolPath := filepath.Join(config.DataDirectory(), "request_log_spool."+unsafeFileChars.ReplaceAllString(cfg.NodeID, "_")+".jsonl")
 	if err := c.EnableSpool(spoolPath, int64(cfg.LogSpoolMB)<<20); err != nil {
 		slog.Warn("request log spool disabled; logs that cannot be delivered will be lost", "err", err)
 	}

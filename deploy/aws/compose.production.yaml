@@ -1,0 +1,50 @@
+# Standalone production reference; do not combine with the development overlays.
+# Install one service on each host using --profile control-plane or --profile gateway.
+name: relayops-production
+x-runtime: &runtime
+  image: ${RELAYOPS_IMAGE:?Set a verified image digest}
+  restart: unless-stopped
+  read_only: true
+  tmpfs: [/tmp]
+  security_opt: [no-new-privileges:true]
+  env_file: ./runtime.env
+  volumes:
+    - /var/lib/relayops:/var/lib/relayops
+    - ./trust:/run/relayops/trust:ro
+  logging:
+    driver: json-file
+    options: {max-size: 10m, max-file: '5'}
+services:
+  control-plane:
+    <<: *runtime
+    profiles: [control-plane]
+    environment:
+      RELAYOPS_ENV: production
+      RELAYOPS_ROLE: control-plane
+      RELAYOPS_ADMIN_ADDR: ':9090'
+      RELAYOPS_STATUS_ADDR: ':9091'
+      RELAYOPS_DATAPLANE_API: 'true'
+      RELAYOPS_DATAPLANE_TOKEN: ''
+      RELAYOPS_ADMIN_TLS_CERT_FILE: /run/relayops/trust/server.crt
+      RELAYOPS_ADMIN_TLS_KEY_FILE: /run/relayops/trust/server.key
+      RELAYOPS_LEADER_ELECTION: postgres
+    ports:
+      - '${PRIVATE_IP:?Set the host private address}:9090:9090'
+      - '127.0.0.1:9091:9091'
+  gateway:
+    <<: *runtime
+    profiles: [gateway]
+    environment:
+      RELAYOPS_ENV: production
+      RELAYOPS_ROLE: gateway
+      RELAYOPS_PROXY_ADDR: ':8080'
+      RELAYOPS_ADMIN_ADDR: '127.0.0.1:9090'
+      RELAYOPS_STATUS_ADDR: ':9091'
+      RELAYOPS_DATAPLANE_ALLOW_HTTP: 'false'
+      RELAYOPS_DATA_DIR: /var/lib/relayops
+      RELAYOPS_PERSISTENT_DATA: 'true'
+      RELAYOPS_LOG_SPOOL_MB: '256'
+      RELAYOPS_DATAPLANE_CA_FILE: /run/relayops/trust/ca.crt
+    ports:
+      - '${PRIVATE_IP:?Set the host private address}:8080:8080'
+      - '127.0.0.1:9091:9091'

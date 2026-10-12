@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -209,7 +211,27 @@ func (s *Store) GetAPIOpsReleasePassport(ctx context.Context, deploymentID strin
 func (s *Store) PromoteCanaryAndSealPassport(ctx context.Context, deploymentID string, rev int64, override bool, pass APIOpsReleasePassport) (APIOpsReleasePassport, []string, error) {
 	var reasons []string
 	err := s.WithTx(ctx, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, `LOCK TABLE test_gate_policies, test_suites, test_suite_versions, test_environments, test_credentials, test_gate_evidence, test_runs, apiops_deployments, apiops_release_passports IN SHARE MODE`); err != nil {
+		if _, err := tx.Exec(ctx, `LOCK TABLE config_revisions IN SHARE ROW EXCLUSIVE MODE`); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `LOCK TABLE test_gate_policies, test_suites, test_suite_versions, test_environments, test_credentials, test_gate_evidence, test_runs IN SHARE MODE`); err != nil {
+			return err
+		}
+		var deploymentStatus string
+		var candidate int64
+		var tenant string
+		if err := tx.QueryRow(ctx, `SELECT status,candidate_revision,tenant_id FROM apiops_deployments WHERE id=$1 FOR UPDATE`, deploymentID).Scan(&deploymentStatus, &candidate, &tenant); err != nil {
+			return mapErr(err)
+		}
+		if candidate != rev || pass.DeploymentID != deploymentID || TenantOrDefault(pass.TenantID) != tenant {
+			return ErrConflict
+		}
+		if deploymentStatus == "promoted" {
+			var raw []byte
+			err := tx.QueryRow(ctx, `SELECT id,deployment_id,tenant_id,manifest,evidence_digest,created_at FROM apiops_release_passports WHERE deployment_id=$1 ORDER BY created_at DESC LIMIT 1`, deploymentID).Scan(&pass.ID, &pass.DeploymentID, &pass.TenantID, &raw, &pass.EvidenceDigest, &pass.CreatedAt)
+			if err == nil {
+				err = json.Unmarshal(raw, &pass.Manifest)
+			}
 			return err
 		}
 		var status string
@@ -221,12 +243,17 @@ func (s *Store) PromoteCanaryAndSealPassport(ctx context.Context, deploymentID s
 		}
 
 		var evalErr error
-		reasons, evalErr = evaluateEnforcedGates(ctx, tx, rev)
+		report, reportErr := evaluateGateReport(ctx, tx, rev)
+		evalErr = reportErr
+		reasons = report.Reasons
 		if evalErr != nil {
 			return evalErr
 		}
-		if len(reasons) > 0 && !override {
+		if len(reasons) > 0 || !report.Enforced || len(report.Suites) == 0 {
 			return &GateRejectedError{Reasons: reasons}
+		}
+		if err := sealReleaseDecision(ctx, tx, rev, report); err != nil {
+			return err
 		}
 
 		// 1. Promote canary revision
@@ -238,6 +265,21 @@ func (s *Store) PromoteCanaryAndSealPassport(ctx context.Context, deploymentID s
 			return err
 		}
 
+		// The export records precisely the evidence checked under these locks.
+		if pass.Manifest == nil {
+			pass.Manifest = map[string]any{}
+		}
+		pass.Manifest["gate_report"] = report
+		pass.Manifest["gate_warning_reasons"] = reasons
+		// Remove the earlier preflight summary; it is not the transaction decision.
+		delete(pass.Manifest, "verification")
+		delete(pass.Manifest, "verification_evidence_digest")
+		raw, err := json.Marshal(pass.Manifest)
+		if err != nil {
+			return err
+		}
+		digest := sha256.Sum256(raw)
+		pass.EvidenceDigest = "sha256:" + hex.EncodeToString(digest[:])
 		// 2. Insert Release Passport
 		manifestJSON, err := json.Marshal(pass.Manifest)
 		if err != nil {

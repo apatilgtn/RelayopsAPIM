@@ -247,6 +247,7 @@ type ConfigPlan struct {
 	apis   []store.API
 	plans  []store.Plan
 	tenant string
+	config DeclarativeConfig
 }
 
 // ComputeConfigPlan diffs the desired document against the current state.
@@ -259,7 +260,7 @@ func ComputeConfigPlan(cfg DeclarativeConfig, current []store.API, currentPlans 
 // that tenant's resources; otherPaths holds base paths used by other tenants,
 // which the shared data plane makes unavailable.
 func computeConfigPlan(cfg DeclarativeConfig, current []store.API, currentPlans []store.Plan, otherPaths map[string]bool, prune bool, subsByAPI, subsByPlan map[string]int) ConfigPlan {
-	plan := ConfigPlan{FormatVersion: DeclarativeFormatVersion, Prune: prune, Changes: []ResourceChange{}}
+	plan := ConfigPlan{FormatVersion: DeclarativeFormatVersion, Prune: prune, Changes: []ResourceChange{}, config: cfg}
 	curAPIs := map[string]*store.API{}
 	for i := range current {
 		curAPIs[current[i].Name] = &current[i]
@@ -692,19 +693,10 @@ func (s *Server) applyDeclarativeConfig(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		if hasGate {
-			u, _ := r.Context().Value(userCtxKey{}).(store.AdminUser)
-			overrideReason := q.Get("override_reason")
-			if overrideReason == "" {
-				overrideReason = r.Header.Get("X-RelayOps-Override-Reason")
-			}
-			if u.Role != "superadmin" || strings.TrimSpace(overrideReason) == "" {
-				writeJSON(w, http.StatusPreconditionFailed, map[string]any{
-					"error":   "promotion_gate_required",
-					"message": "one or more modified APIs have active test gate policies: direct all-fleet apply is blocked. Deploy as a canary (rollout=canary) and pass verification suites, or supply superadmin override.",
-				})
-				return
-			}
+			writeJSON(w, http.StatusPreconditionFailed, map[string]any{"error": "promotion_gate_required", "message": "direct all-fleet apply is blocked for gated APIs; deploy as a canary and pass required verification"})
+			return
 		}
+
 	case "canary":
 		split.TrafficPercent, _ = strconv.Atoi(q.Get("traffic_percent"))
 		split.Header = q.Get("canary_header")
@@ -719,8 +711,17 @@ func (s *Server) applyDeclarativeConfig(w http.ResponseWriter, r *http.Request) 
 	}
 
 	mutate := func(tx pgx.Tx) error {
-		if want := q.Get("plan_hash"); want != "" && want != plan.PlanHash {
-			return fmt.Errorf("%w: plan_hash mismatch inside publication transaction (reviewed %s, computed %s)", store.ErrConflict, want, plan.PlanHash)
+		if _, err := tx.Exec(ctx, `LOCK TABLE apis,plans,test_gate_policies IN SHARE ROW EXCLUSIVE MODE`); err != nil {
+			return err
+		}
+		if want := q.Get("plan_hash"); want != "" {
+			apis, plans, err := store.ConfigResourcesTx(ctx, tx, plan.tenant)
+			if err != nil {
+				return err
+			}
+			if actual := planHash(plan.config, apis, plans, plan.Prune); want != actual {
+				return fmt.Errorf("%w: reviewed plan changed inside publication transaction", store.ErrConflict)
+			}
 		}
 		if expectedBase := q.Get("expected_base_revision"); expectedBase != "" {
 			baseRev, _ := strconv.ParseInt(expectedBase, 10, 64)
@@ -729,6 +730,20 @@ func (s *Server) applyDeclarativeConfig(w http.ResponseWriter, r *http.Request) 
 				return err
 			} else if baseRev > 0 && curRev != baseRev {
 				return fmt.Errorf("%w: concurrent publication occurred (expected revision %d, current is %d)", store.ErrConflict, baseRev, curRev)
+			}
+		}
+		if rollout == "all" {
+			for _, ch := range plan.Changes {
+				if ch.Type != "api" || ch.Action == "unchanged" {
+					continue
+				}
+				var count int
+				if err := tx.QueryRow(ctx, `SELECT count(*) FROM test_gate_policies g JOIN apis a ON a.id=g.api_id WHERE a.tenant_id=$1 AND a.name=$2 AND g.enforcement_enabled`, plan.tenant, ch.Name).Scan(&count); err != nil {
+					return err
+				}
+				if count > 0 {
+					return fmt.Errorf("%w: gated APIs require canary verification", store.ErrConflict)
+				}
 			}
 		}
 		for _, ch := range plan.Changes {
@@ -757,6 +772,12 @@ func (s *Server) applyDeclarativeConfig(w http.ResponseWriter, r *http.Request) 
 				return err
 			}
 		}
+		if d, ok := store.ReleaseDraftFromContext(ctx); ok {
+			if err := installDraftGates(ctx, tx, d); err != nil {
+				return err
+			}
+		}
+
 		return nil
 	}
 

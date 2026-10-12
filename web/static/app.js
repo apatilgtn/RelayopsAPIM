@@ -56,11 +56,12 @@
   let token = sessionStorage.getItem('relayops_token') || localStorage.getItem('relayops_token') || '';
   if (!token) { location.replace('/login'); return; }
 
-  async function api(method, path, body) {
+  async function api(method, path, body, extraHeaders = {}) {
     const res = await fetch(path, {
       method,
       headers: {
         'Authorization': 'Bearer ' + token,
+        ...extraHeaders,
         ...(body !== undefined ? { 'Content-Type': 'application/json' } : {})
       },
       body: body !== undefined ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
@@ -446,6 +447,7 @@
     subscriptions: 'Subscriptions',
     plans: 'Plans',
     fleet: 'Releases & fleet',
+    release: 'Release workspace',
     audit: 'Audit log',
     team: 'Users & roles',
     tenants: 'Tenants & Workspaces',
@@ -744,7 +746,7 @@
             ${a.is_draft ? `<button class="button small primary" data-publish="${a.id}">Publish</button>` : ''}
             ${a.protocol === 'mcp' ? `<button class="button small" data-mcp="${a.id}" title="Approve the MCP tools this API exposes">MCP tools</button>` : ''}
             <button class="button small" data-policies="${a.id}" title="Protocol inspection (GraphQL, gRPC, MCP) and WASM plugins">Policies</button>
-            <button class="button small" data-safety="${a.id}" title="Pre-release safety report and go/no-go gates">Safety report</button>
+            <a class="button small" href="#/release/api-${a.id}">Start safe release</a><button class="button small" data-safety="${a.id}" title="Pre-release safety report and go/no-go gates">Safety report</button>
             <button class="button small" data-preview="${a.id}" title="Preview breaking changes against historical traffic">Preview</button>
             <button class="button small" data-edit="${a.id}">Edit</button>
             <button class="button small danger" data-del="${a.id}">Delete</button>
@@ -1640,7 +1642,7 @@
         <div class="spacer"></div>
         <button class="button small" id="btn-compare-revs">Compare revisions</button>
         <button class="button small ghost" id="btn-auto-rollback">Auto-Rollback</button>
-        <button class="button small ghost" id="btn-export-config">Export config</button>
+        <a class="button primary" href="#/release">Start safe release</a><button class="button small ghost" id="btn-export-config">Export config</button>
         <button class="button primary" id="btn-apply-config">Apply config</button>
         <button class="button small" id="refresh-fleet">Refresh</button>
       </div>
@@ -2224,45 +2226,8 @@
       if (promoteRev) {
         const cs = await api('GET', `/api/revisions/${promoteRev}/canary-status`).catch(() => null);
         const gate = cs?.gate_status;
-        if (gate?.enforced && !gate?.eligible) {
-          openModal({
-            title: 'Test Studio Promotion Gate Blocked',
-            body: `
-              <div class="form-error" style="margin-bottom:14px">
-                <strong>Promotion Gate Not Satisfied</strong>
-                <p>Automatic promotion is blocked because required passing test suite evidence is missing or ineligible for revision <b>rev_${promoteRev}</b>.</p>
-                <ul style="margin:8px 0 0 16px; font-size:12px">
-                  ${(gate.reasons || ['Passing test run evidence required']).map(r => `<li>${esc(r)}</li>`).join('')}
-                </ul>
-              </div>
-              <p class="small muted">Superadmins may override this gate with an explicit business justification.</p>
-              <div class="field" style="margin-top:12px">
-                <label>Superadmin Override Reason</label>
-                <input type="text" id="gate-override-reason" placeholder="e.g. Critical security hotfix verified in staging" />
-              </div>
-            `,
-            actions: [
-              {
-                label: 'Promote with Override',
-                danger: true,
-                onClick: async (close, wrap) => {
-                  const reason = wrap.querySelector('#gate-override-reason')?.value?.trim();
-                  if (!reason) {
-                    toast('Superadmin override reason is required to bypass test gate', 'warn');
-                    return;
-                  }
-                  try {
-                    await api('POST', `/api/revisions/${promoteRev}/promote?override_reason=${encodeURIComponent(reason)}`);
-                    toast(` Revision rev_${promoteRev} promoted with gate override!`, 'success');
-                    close();
-                    views.fleet();
-                  } catch (err) {
-                    toast(err.message, 'error');
-                  }
-                }
-              }
-            ]
-          });
+        if (!gate?.available || !gate?.enforced || !gate?.eligible) {
+          openModal({title:'Promotion blocked', body:`<p>Required release checks must pass before promotion.</p><ul>${(gate?.reasons || ['Release evidence unavailable']).map(r=>`<li>${esc(r)}</li>`).join('')}</ul><a class="button" href="#/tests">Resolve required checks</a>`,actions:[]});
           return;
         }
 
@@ -2270,7 +2235,7 @@
           'Promote release',
           `Promote <b>rev_${promoteRev}</b> from canary to 100% of all gateway nodes in the cluster?`,
           async () => {
-            await api('POST', `/api/revisions/${promoteRev}/promote`);
+            await api('POST', `/api/revisions/${promoteRev}/promote`, { reviewed: true });
             toast(` Revision rev_${promoteRev} promoted to all fleet gateways!`, 'success');
             views.fleet();
           },
@@ -3821,6 +3786,7 @@
     });
   }
   if (window.initOrbit) window.initOrbit({ api, esc, toast });
+  if (window.initReleaseWorkspace) window.initReleaseWorkspace({ views, api, esc, $, toast });
   connectStream();
   route();
 })();

@@ -1,0 +1,587 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "RelayOps isolated two-AZ VM reference. Runtime and secrets installed privately after provisioning. Certification pending.",
+  "Parameters": {
+    "VpcId": {
+      "Type": "AWS::EC2::VPC::Id"
+    },
+    "PrivateSubnets": {
+      "Type": "List<AWS::EC2::Subnet::Id>"
+    },
+    "PublicSubnets": {
+      "Type": "List<AWS::EC2::Subnet::Id>"
+    },
+    "AmiId": {
+      "Type": "AWS::EC2::Image::Id",
+      "Description": "Maintained golden AMI with verified RelayOps runtime, Docker Compose and SSM agent"
+    },
+    "InstanceProfile": {
+      "Type": "String"
+    },
+    "ApiCertificateArn": {
+      "Type": "String"
+    },
+    "ControlCertificateArn": {
+      "Type": "String"
+    },
+    "PrivateClientCIDR": {
+      "Type": "String",
+      "Description": "VPN/private administration network CIDR; never 0.0.0.0/0"
+    },
+    "InstanceType": {
+      "Type": "String",
+      "Default": "t3.medium"
+    }
+  },
+  "Rules": {
+    "PrivateAdministrationOnly": {
+      "Assertions": [
+        {
+          "Assert": {
+            "Fn::Not": [
+              {
+                "Fn::Equals": [
+                  {
+                    "Ref": "PrivateClientCIDR"
+                  },
+                  "0.0.0.0/0"
+                ]
+              }
+            ]
+          },
+          "AssertDescription": "Private administration CIDR must not allow the public internet"
+        }
+      ]
+    }
+  },
+  "Resources": {
+    "ApiLBGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VpcId"
+        },
+        "GroupDescription": "ApiLBGroup",
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 443,
+            "ToPort": 443,
+            "CidrIp": "0.0.0.0/0"
+          }
+        ]
+      }
+    },
+    "ControlLBGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VpcId"
+        },
+        "GroupDescription": "ControlLBGroup",
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 443,
+            "ToPort": 443,
+            "CidrIp": {
+              "Ref": "PrivateClientCIDR"
+            }
+          }
+        ]
+      }
+    },
+    "GatewayGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VpcId"
+        },
+        "GroupDescription": "GatewayGroup",
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 8080,
+            "ToPort": 8080,
+            "SourceSecurityGroupId": {
+              "Ref": "ApiLBGroup"
+            }
+          }
+        ]
+      }
+    },
+    "ControlGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VpcId"
+        },
+        "GroupDescription": "ControlGroup",
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 9090,
+            "ToPort": 9090,
+            "SourceSecurityGroupId": {
+              "Ref": "ControlLBGroup"
+            }
+          }
+        ]
+      }
+    },
+    "GatewayToControl": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "GroupId": {
+          "Ref": "ControlLBGroup"
+        },
+        "SourceSecurityGroupId": {
+          "Ref": "GatewayGroup"
+        },
+        "IpProtocol": "tcp",
+        "FromPort": 443,
+        "ToPort": 443
+      }
+    },
+    "ApiLB": {
+      "Type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      "Properties": {
+        "Scheme": "internet-facing",
+        "Type": "application",
+        "Subnets": {
+          "Ref": "PublicSubnets"
+        },
+        "SecurityGroups": [
+          {
+            "Ref": "ApiLBGroup"
+          }
+        ],
+        "LoadBalancerAttributes": [
+          {
+            "Key": "deletion_protection.enabled",
+            "Value": "true"
+          }
+        ]
+      }
+    },
+    "ApiTargets": {
+      "Type": "AWS::ElasticLoadBalancingV2::TargetGroup",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VpcId"
+        },
+        "Port": 8080,
+        "Protocol": "HTTP",
+        "TargetType": "instance",
+        "HealthCheckPath": "/healthz",
+        "HealthCheckProtocol": "HTTP",
+        "Matcher": {
+          "HttpCode": "200"
+        },
+        "Targets": [
+          {
+            "Id": {
+              "Ref": "GatewayA"
+            }
+          },
+          {
+            "Id": {
+              "Ref": "GatewayB"
+            }
+          }
+        ]
+      }
+    },
+    "ApiListener": {
+      "Type": "AWS::ElasticLoadBalancingV2::Listener",
+      "Properties": {
+        "LoadBalancerArn": {
+          "Ref": "ApiLB"
+        },
+        "Port": 443,
+        "Protocol": "HTTPS",
+        "SslPolicy": "ELBSecurityPolicy-TLS13-1-2-2021-06",
+        "Certificates": [
+          {
+            "CertificateArn": {
+              "Ref": "ApiCertificateArn"
+            }
+          }
+        ],
+        "DefaultActions": [
+          {
+            "Type": "forward",
+            "TargetGroupArn": {
+              "Ref": "ApiTargets"
+            }
+          }
+        ]
+      }
+    },
+    "ControlLB": {
+      "Type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      "Properties": {
+        "Scheme": "internal",
+        "Type": "application",
+        "Subnets": {
+          "Ref": "PrivateSubnets"
+        },
+        "SecurityGroups": [
+          {
+            "Ref": "ControlLBGroup"
+          }
+        ],
+        "LoadBalancerAttributes": [
+          {
+            "Key": "deletion_protection.enabled",
+            "Value": "true"
+          }
+        ]
+      }
+    },
+    "ControlTargets": {
+      "Type": "AWS::ElasticLoadBalancingV2::TargetGroup",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VpcId"
+        },
+        "Port": 9090,
+        "Protocol": "HTTPS",
+        "TargetType": "instance",
+        "HealthCheckPath": "/healthz",
+        "HealthCheckProtocol": "HTTPS",
+        "Matcher": {
+          "HttpCode": "200"
+        },
+        "Targets": [
+          {
+            "Id": {
+              "Ref": "ControlA"
+            }
+          },
+          {
+            "Id": {
+              "Ref": "ControlB"
+            }
+          }
+        ]
+      }
+    },
+    "ControlListener": {
+      "Type": "AWS::ElasticLoadBalancingV2::Listener",
+      "Properties": {
+        "LoadBalancerArn": {
+          "Ref": "ControlLB"
+        },
+        "Port": 443,
+        "Protocol": "HTTPS",
+        "SslPolicy": "ELBSecurityPolicy-TLS13-1-2-2021-06",
+        "Certificates": [
+          {
+            "CertificateArn": {
+              "Ref": "ControlCertificateArn"
+            }
+          }
+        ],
+        "DefaultActions": [
+          {
+            "Type": "forward",
+            "TargetGroupArn": {
+              "Ref": "ControlTargets"
+            }
+          }
+        ]
+      }
+    },
+    "GatewayA": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "ImageId": {
+          "Ref": "AmiId"
+        },
+        "InstanceType": {
+          "Ref": "InstanceType"
+        },
+        "IamInstanceProfile": {
+          "Ref": "InstanceProfile"
+        },
+        "MetadataOptions": {
+          "HttpTokens": "required",
+          "HttpEndpoint": "enabled"
+        },
+        "NetworkInterfaces": [
+          {
+            "DeviceIndex": "0",
+            "AssociatePublicIpAddress": false,
+            "SubnetId": {
+              "Fn::Select": [
+                0,
+                {
+                  "Ref": "PrivateSubnets"
+                }
+              ]
+            },
+            "GroupSet": [
+              {
+                "Ref": "GatewayGroup"
+              }
+            ]
+          }
+        ],
+        "BlockDeviceMappings": [
+          {
+            "DeviceName": "/dev/xvda",
+            "Ebs": {
+              "VolumeSize": 24,
+              "Encrypted": true,
+              "VolumeType": "gp3"
+            }
+          },
+          {
+            "DeviceName": "/dev/sdf",
+            "Ebs": {
+              "VolumeSize": 40,
+              "Encrypted": true,
+              "VolumeType": "gp3",
+              "DeleteOnTermination": false
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${AWS::StackName}-gateway-a"
+            }
+          },
+          {
+            "Key": "RelayOpsRole",
+            "Value": "gateway"
+          }
+        ]
+      }
+    },
+    "GatewayB": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "ImageId": {
+          "Ref": "AmiId"
+        },
+        "InstanceType": {
+          "Ref": "InstanceType"
+        },
+        "IamInstanceProfile": {
+          "Ref": "InstanceProfile"
+        },
+        "MetadataOptions": {
+          "HttpTokens": "required",
+          "HttpEndpoint": "enabled"
+        },
+        "NetworkInterfaces": [
+          {
+            "DeviceIndex": "0",
+            "AssociatePublicIpAddress": false,
+            "SubnetId": {
+              "Fn::Select": [
+                1,
+                {
+                  "Ref": "PrivateSubnets"
+                }
+              ]
+            },
+            "GroupSet": [
+              {
+                "Ref": "GatewayGroup"
+              }
+            ]
+          }
+        ],
+        "BlockDeviceMappings": [
+          {
+            "DeviceName": "/dev/xvda",
+            "Ebs": {
+              "VolumeSize": 24,
+              "Encrypted": true,
+              "VolumeType": "gp3"
+            }
+          },
+          {
+            "DeviceName": "/dev/sdf",
+            "Ebs": {
+              "VolumeSize": 40,
+              "Encrypted": true,
+              "VolumeType": "gp3",
+              "DeleteOnTermination": false
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${AWS::StackName}-gateway-b"
+            }
+          },
+          {
+            "Key": "RelayOpsRole",
+            "Value": "gateway"
+          }
+        ]
+      }
+    },
+    "ControlA": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "ImageId": {
+          "Ref": "AmiId"
+        },
+        "InstanceType": {
+          "Ref": "InstanceType"
+        },
+        "IamInstanceProfile": {
+          "Ref": "InstanceProfile"
+        },
+        "MetadataOptions": {
+          "HttpTokens": "required",
+          "HttpEndpoint": "enabled"
+        },
+        "NetworkInterfaces": [
+          {
+            "DeviceIndex": "0",
+            "AssociatePublicIpAddress": false,
+            "SubnetId": {
+              "Fn::Select": [
+                0,
+                {
+                  "Ref": "PrivateSubnets"
+                }
+              ]
+            },
+            "GroupSet": [
+              {
+                "Ref": "ControlGroup"
+              }
+            ]
+          }
+        ],
+        "BlockDeviceMappings": [
+          {
+            "DeviceName": "/dev/xvda",
+            "Ebs": {
+              "VolumeSize": 24,
+              "Encrypted": true,
+              "VolumeType": "gp3"
+            }
+          },
+          {
+            "DeviceName": "/dev/sdf",
+            "Ebs": {
+              "VolumeSize": 40,
+              "Encrypted": true,
+              "VolumeType": "gp3",
+              "DeleteOnTermination": false
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${AWS::StackName}-control-a"
+            }
+          },
+          {
+            "Key": "RelayOpsRole",
+            "Value": "control"
+          }
+        ]
+      }
+    },
+    "ControlB": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "ImageId": {
+          "Ref": "AmiId"
+        },
+        "InstanceType": {
+          "Ref": "InstanceType"
+        },
+        "IamInstanceProfile": {
+          "Ref": "InstanceProfile"
+        },
+        "MetadataOptions": {
+          "HttpTokens": "required",
+          "HttpEndpoint": "enabled"
+        },
+        "NetworkInterfaces": [
+          {
+            "DeviceIndex": "0",
+            "AssociatePublicIpAddress": false,
+            "SubnetId": {
+              "Fn::Select": [
+                1,
+                {
+                  "Ref": "PrivateSubnets"
+                }
+              ]
+            },
+            "GroupSet": [
+              {
+                "Ref": "ControlGroup"
+              }
+            ]
+          }
+        ],
+        "BlockDeviceMappings": [
+          {
+            "DeviceName": "/dev/xvda",
+            "Ebs": {
+              "VolumeSize": 24,
+              "Encrypted": true,
+              "VolumeType": "gp3"
+            }
+          },
+          {
+            "DeviceName": "/dev/sdf",
+            "Ebs": {
+              "VolumeSize": 40,
+              "Encrypted": true,
+              "VolumeType": "gp3",
+              "DeleteOnTermination": false
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${AWS::StackName}-control-b"
+            }
+          },
+          {
+            "Key": "RelayOpsRole",
+            "Value": "control"
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "ApiDNS": {
+      "Value": {
+        "Fn::GetAtt": [
+          "ApiLB",
+          "DNSName"
+        ]
+      }
+    },
+    "ControlDNS": {
+      "Value": {
+        "Fn::GetAtt": [
+          "ControlLB",
+          "DNSName"
+        ]
+      }
+    }
+  }
+}

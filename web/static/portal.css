@@ -16,3 +16,5 @@
 
 
 .tag.graphql{background:#fdf2f8;border-color:#f6d5e8;color:#a3346f}.api-icon.graphql{background:#fbe7f2;color:#a3346f}.tag.grpc{background:#eef6ff;border-color:#d4e6fb;color:#1f5f9e}.api-icon.grpc{background:#e3effc;color:#1f5f9e}.tag.mcp{background:#effaf3;border-color:#cdebd8;color:#1e6b45}.api-icon.mcp{background:#e1f4e8;color:#1e6b45}
+
+.connection-steps{display:flex;gap:8px;flex-wrap:wrap;margin:28px 0}.connection-steps a{padding:10px 12px;border:1px solid var(--line,#dce1db);border-radius:9px;text-decoration:none;color:inherit}.connection-steps a[aria-current]{background:var(--green,#c4f36b);color:#132022}.connection-steps span{font-weight:700}.connection-steps a:focus-visible{outline:3px solid #496b22;outline-offset:3px}#view-connect dl{display:grid;grid-template-columns:140px 1fr;gap:12px}#view-connect dd{margin:0}#view-connect input,#view-connect select{max-width:100%}@media(max-width:650px){.connection-steps{flex-wrap:nowrap;overflow:auto}.connection-steps a{min-width:150px}#view-connect dl{grid-template-columns:1fr}}

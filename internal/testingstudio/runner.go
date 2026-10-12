@@ -25,6 +25,7 @@ type RunnerConfig struct {
 	DefaultTimeout    time.Duration
 	RunnerToken       string
 	TrustedGateways   []string
+	DefaultGatewayURL string
 }
 
 type Runner struct {
@@ -335,7 +336,10 @@ func (r *Runner) executeJob(job store.TestJob) {
 
 	gatewayTarget := env.GatewayTarget
 	if gatewayTarget == "" {
-		gatewayTarget = "http://127.0.0.1:8080"
+		gatewayTarget = r.cfg.DefaultGatewayURL
+		if gatewayTarget == "" {
+			gatewayTarget = "http://127.0.0.1:8080"
+		}
 	}
 	gatewayTarget = strings.TrimRight(gatewayTarget, "/")
 

@@ -1,0 +1,20 @@
+{
+  "isolated_lab": true,
+  "lab_id": "relayops-certification-lab",
+  "control_planes": ["i-CONTROL_A", "i-CONTROL_B"],
+  "gateways": ["i-GATEWAY_A", "i-GATEWAY_B"],
+  "replacement_instance": "i-SAME_AZ_SPARE",
+  "restore_instance": "i-FRESH_RECOVERY_LAB",
+  "recovery_volume": "vol-RETAINED_GATEWAY_A",
+  "gateway_target_group": "arn:aws:elasticloadbalancing:REGION:ACCOUNT:targetgroup/LAB/ID",
+  "database_endpoints": [{"ip": "10.0.10.10", "port": 5432}],
+  "redis_endpoints": [{"ip": "10.0.10.20", "port": 6379}],
+  "control_endpoints": [{"ip": "10.0.10.30", "port": 443}, {"ip": "10.0.20.30", "port": 443}],
+  "probe_url": "https://LAB-API.example.com/health/authorized",
+  "fault_seconds": 30,
+  "duration_seconds": 120,
+  "interval_seconds": 0.25,
+  "upgrade_image": "registry.example.com/relayops@sha256:REPLACE_WITH_VERIFIED_DIGEST",
+  "workload": {"concurrency": 1, "payload_bytes": 0, "authentication": "api_key", "release": "FILL_IN", "environment": "two-AZ EC2, existing DB/secret provider, shared Redis"},
+  "acceptance": {"max_error_rate_percent": 1, "max_p95_ms": 1000, "max_rto_seconds": 120, "max_rpo_seconds": 60, "max_log_loss": 0, "max_convergence_seconds": 30, "status": "example criteria; approve before execution"}
+}

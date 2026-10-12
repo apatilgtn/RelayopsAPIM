@@ -35,8 +35,9 @@ func (s *Server) planAPIOpsDeployment(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &in) {
 		return
 	}
-	if in.Actor == "" {
-		in.Actor = s.getActor(r)
+	in.Actor = s.getActor(r)
+	if !s.validateAPIOpsCandidate(w, r, tenant, in.EnvironmentID, in.CandidateRevision) {
+		return
 	}
 
 	res, err := s.apiops.PlanDeployment(r.Context(), tenant, in)
@@ -64,23 +65,12 @@ func (s *Server) createAPIOpsDeployment(w http.ResponseWriter, r *http.Request) 
 	in.Status = "planned"
 	in.PromotedRevision = 0
 
-	// Validate environment belongs to tenant if provided
-	if in.EnvironmentID != nil && *in.EnvironmentID != "" {
-		env, err := s.store.GetAPIOpsEnvironment(r.Context(), *in.EnvironmentID)
-		if err != nil || env.TenantID != tenant {
-			writeErr(w, http.StatusBadRequest, "invalid_environment", "environment does not belong to tenant")
-			return
-		}
+	environment := ""
+	if in.EnvironmentID != nil {
+		environment = *in.EnvironmentID
 	}
-
-	// Validate candidate revision belongs to tenant if provided
-	if in.CandidateRevision > 0 {
-		var revTenant string
-		err := s.store.Pool.QueryRow(r.Context(), `SELECT tenant_id FROM config_revisions WHERE revision=$1`, in.CandidateRevision).Scan(&revTenant)
-		if err != nil || (revTenant != "" && revTenant != tenant) {
-			writeErr(w, http.StatusForbidden, "invalid_candidate_revision", "candidate revision does not belong to tenant")
-			return
-		}
+	if !s.validateAPIOpsCandidate(w, r, tenant, environment, in.CandidateRevision) {
+		return
 	}
 
 	dep, err := s.store.CreateAPIOpsDeployment(r.Context(), in)
@@ -133,9 +123,18 @@ func (s *Server) verifyAPIOpsDeployment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	if !scopeFrom(r).Platform {
+		writeErr(w, 403, "platform_only", "fleet evidence requires a platform administrator")
+		return
+	}
+	report, reportErr := s.store.EvaluateTestGates(r.Context(), dep.CandidateRevision)
+	if reportErr != nil {
+		s.fail(w, reportErr)
+		return
+	}
 	digest, err := s.apiops.VerifyDeployment(r.Context(), id)
 	if errors.Is(err, apiops.ErrVerificationRejected) {
-		writeErr(w, http.StatusPreconditionFailed, "verification_rejected", err.Error())
+		writeJSON(w, http.StatusPreconditionFailed, map[string]any{"error": "verification_rejected", "message": err.Error(), "gate_status": report})
 		return
 	}
 	if err != nil {
@@ -172,8 +171,11 @@ func (s *Server) promoteAPIOpsDeployment(w http.ResponseWriter, r *http.Request)
 
 	var req struct {
 		OverrideReason string `json:"override_reason"`
+		Reviewed       bool   `json:"reviewed"`
 	}
-	_ = decodeOptional(w, r, &req)
+	if !decodeOptional(w, r, &req) {
+		return
+	}
 
 	u, _ := r.Context().Value(userCtxKey{}).(store.AdminUser)
 	isSuperadmin := u.Role == "superadmin"
@@ -280,4 +282,31 @@ func (s *Server) createAPIOpsEnvironment(w http.ResponseWriter, r *http.Request)
 	}
 	s.auditTenant(r, tenant, "APIOPS_ENV_CREATE", "apiops_environment", res.ID, map[string]any{"name": res.Name})
 	writeJSON(w, http.StatusCreated, res)
+}
+
+// Revisions contain the whole fleet; they are not owned by a single tenant.
+func (s *Server) validateAPIOpsCandidate(w http.ResponseWriter, r *http.Request, tenant, environment string, revision int64) bool {
+	if environment != "" {
+		env, err := s.store.GetAPIOpsEnvironment(r.Context(), environment)
+		if err != nil || env.TenantID != tenant {
+			writeErr(w, 400, "invalid_environment", "environment does not belong to tenant")
+			return false
+		}
+	}
+	if revision < 0 {
+		writeErr(w, 400, "invalid_candidate_revision", "candidate must be a positive revision")
+		return false
+	}
+	if revision > 0 {
+		if !scopeFrom(r).Platform {
+			writeErr(w, 403, "platform_only", "binding a fleet-wide candidate requires a platform administrator")
+			return false
+		}
+		var status string
+		if err := s.store.Pool.QueryRow(r.Context(), `SELECT status FROM config_revisions WHERE revision=$1`, revision).Scan(&status); err != nil || status != "canary" {
+			writeErr(w, 400, "invalid_candidate_revision", "candidate must be an in-flight canary")
+			return false
+		}
+	}
+	return true
 }

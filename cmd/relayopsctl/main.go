@@ -47,7 +47,7 @@ Usage:
   relayopsctl bundle     validate -f FILE                          Validate a compiled bundle and its hashes
   relayopsctl rollout    status                          Show the stable/canary revisions and fleet convergence
   relayopsctl rollout    canary  REV [--traffic-percent N] [--canary-header H [--canary-header-value V]]
-  relayopsctl rollout    promote REV                     Promote a canary to the whole fleet
+  relayopsctl rollout    promote REV --reviewed          Promote a canary to the whole fleet (after reviewing it)
   relayopsctl rollout    abort   REV                     Withdraw a canary and restore the stable revision
   relayopsctl revisions                                  List recent revisions
   relayopsctl rollback   REV                             Restore an earlier revision as a new revision
@@ -90,7 +90,7 @@ func main() {
 type options struct {
 	server, token, tenant, file, out, output, planHash, canaryHeader, canaryHeaderValue, savePlan, envID, apiID, apiKey string
 	dir, format, olderThan                                                                                              string
-	prune, detailed, noImpact, canary, autoApprove, wait, vacuum                                                        bool
+	prune, detailed, noImpact, canary, autoApprove, wait, vacuum, reviewed                                              bool
 	trafficPercent                                                                                                      int
 	targetRevision                                                                                                      int64
 	args                                                                                                                []string
@@ -125,6 +125,7 @@ func parse(name string, args []string) (*options, error) {
 	fs.BoolVar(&o.canary, "canary", false, "")
 	fs.BoolVar(&o.autoApprove, "auto-approve", false, "")
 	fs.BoolVar(&o.vacuum, "vacuum", false, "")
+	fs.BoolVar(&o.reviewed, "reviewed", false, "")
 	fs.IntVar(&o.trafficPercent, "traffic-percent", 0, "")
 	// Allow flags after positional arguments (e.g. "canary 12 --traffic-percent 5").
 	var positional []string
@@ -596,7 +597,7 @@ func cmdApply(c *client, o *options, w io.Writer, stdin io.Reader) (int, error) 
 	_ = json.Unmarshal(r.body, &res)
 	fmt.Fprintln(w, res.Message)
 	if res.Applied && res.Rollout == "canary" {
-		fmt.Fprintf(w, "Canary rev_%d is live. Watch it with 'relayopsctl rollout status', then 'rollout promote %d' or 'rollout abort %d'.\n", res.Revision, res.Revision, res.Revision)
+		fmt.Fprintf(w, "Canary rev_%d is live. Watch it with 'relayopsctl rollout status', then 'rollout promote %d --reviewed' or 'rollout abort %d'.\n", res.Revision, res.Revision, res.Revision)
 	}
 	return 0, nil
 }
@@ -744,7 +745,12 @@ func cmdRollout(c *client, o *options, w io.Writer) (int, error) {
 		if err := need(); err != nil {
 			return 1, err
 		}
-		return printResult(c.do("POST", "/api/revisions/"+rev+"/promote", nil), o, w)
+		// The server requires the operator to confirm they reviewed the release
+		// evidence; the flag is that confirmation and is never assumed.
+		if !o.reviewed {
+			return 1, errors.New("review the canary first ('relayopsctl rollout status'), then confirm with: relayopsctl rollout promote " + rev + " --reviewed")
+		}
+		return printResult(c.do("POST", "/api/revisions/"+rev+"/promote", []byte(`{"reviewed":true}`)), o, w)
 	case "abort":
 		if err := need(); err != nil {
 			return 1, err

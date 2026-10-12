@@ -14,3 +14,12 @@ plugins/wasm/dist/
 # Benchmark harness build output and results
 deploy/bench/.build/
 deploy/bench/results/
+
+# Isolated local test databases and temporary verification files
+/scratch/
+
+# Enterprise drill Python cache
+/scripts/enterprise/__pycache__/
+
+# Marketing website has its own Sites-managed source repository
+/sites/relayops-marketing/

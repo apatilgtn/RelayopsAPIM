@@ -21,9 +21,10 @@ import (
 // StartTestRunner launches the durable background test execution worker.
 func (s *Server) StartTestRunner(ctx context.Context) {
 	cfg := testingstudio.RunnerConfig{
-		WorkerID:        fmt.Sprintf("worker-%s-%d", s.nodeID, os.Getpid()),
-		RunnerToken:     s.runnerToken,
-		TrustedGateways: []string{s.gatewayURL, "http://127.0.0.1:8080", "http://localhost:8080"},
+		WorkerID:          fmt.Sprintf("worker-%s-%d", s.nodeID, os.Getpid()),
+		RunnerToken:       s.runnerToken,
+		DefaultGatewayURL: s.gatewayURL,
+		TrustedGateways:   []string{s.gatewayURL, "http://127.0.0.1:8080", "http://localhost:8080"},
 	}
 	runner := testingstudio.NewRunner(s.store, cfg)
 	runner.Start()
@@ -331,6 +332,9 @@ func (s *Server) createTestEnvironment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if env.GatewayTarget == "" {
+		env.GatewayTarget = s.gatewayURL
+	}
 	if env.GatewayTarget != "" {
 		if _, err := testingstudio.ValidateGatewayTarget(env.GatewayTarget); err != nil {
 			writeErr(w, http.StatusBadRequest, "invalid_gateway_target", err.Error())

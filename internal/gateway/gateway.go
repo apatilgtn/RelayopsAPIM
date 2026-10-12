@@ -498,6 +498,7 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	st.route = route
+	rec.Header().Set("X-RelayOps-API-ID", route.API.ID)
 	st.matchedRoute = route.API.BasePath
 	st.policyEvaluations = map[string]any{
 		"routing": map[string]any{"matched": true, "base_path": route.API.BasePath, "upstream": route.Upstream.String()},

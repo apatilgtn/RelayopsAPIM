@@ -189,7 +189,7 @@
               <div style="font-size:24px; font-weight:700; margin-top:6px;">$${(totalMonthly / 100).toFixed(2)}</div>
             </div>
             <div class="card" style="padding:16px;">
-              <div class="muted" style="font-size:12px; text-transform:uppercase; letter-spacing:0.5px;">Current Spend This Cycle</div>
+              <div class="muted" style="font-size:12px; text-transform:uppercase; letter-spacing:0.5px;">Estimated spend this cycle</div>
               <div style="font-size:24px; font-weight:700; color:var(--text); margin-top:6px;">$${(totalSpend / 100).toFixed(2)}</div>
             </div>
             <div class="card" style="padding:16px;">
@@ -213,7 +213,7 @@
                     <th>Account ID</th>
                     <th>Consumer ID</th>
                     <th>Monthly Limit</th>
-                    <th>Spend Progress</th>
+                    <th>Estimated spend progress</th>
                     <th>In-Flight Reserved</th>
                     <th>Enforcement</th>
                     <th>Reset Day</th>
@@ -722,7 +722,7 @@
           <div class="card">
             <div class="card-header"><h3 style="margin:0;font-size:16px">Recent runs</h3></div>
             <div class="table-wrap"><table>
-              <thead><tr><th>Started</th><th>Suite</th><th>Manifest</th><th>Status</th><th>Pass rate</th><th>Safety</th><th>Cost</th><th>Evidence</th><th></th></tr></thead>
+              <thead><tr><th>Started</th><th>Suite</th><th>Manifest</th><th>Status</th><th>Pass rate</th><th>Safety</th><th>Estimated cost</th><th>Evidence</th><th></th></tr></thead>
               <tbody>${runs.length ? runs.map((r) => {
                 const s = r.summary || {};
                 const passed = r.status === 'completed' && s.qualified === true;
@@ -846,7 +846,7 @@
         body: `
           <p class="muted">${esc(manifestLabel(run.manifest_id))} · model <span class="mono">${esc(s.model || '')}</span> · started ${esc(fmtDate(run.started_at))}${run.error ? ` · <span class="tag error">${esc(run.error)}</span>` : ''}</p>
           <div class="table-wrap"><table>
-            <thead><tr><th>Case</th><th>Result</th><th>Latency</th><th>Cost</th><th>Response</th></tr></thead>
+            <thead><tr><th>Case</th><th>Result</th><th>Latency</th><th>Estimated cost</th><th>Response</th></tr></thead>
             <tbody>${(s.results || []).map((t) => `<tr>
               <td class="mono">${esc(t.test_case_id)}</td>
               <td>${t.passed ? '<span class="tag success">Pass</span>' : `<span class="tag error" title="${esc(t.failure || '')}">Fail</span><div class="small muted">${esc(t.failure || '')}</div>`}</td>

@@ -15,6 +15,9 @@ import (
 )
 
 type Config struct {
+	Environment      string
+	DataDir          string
+	PersistentData   bool
 	DatabaseURL      string        // RELAYOPS_DATABASE_URL
 	RedisURL         string        // RELAYOPS_REDIS_URL    - Redis connection for cluster rate limiting & quotas
 	ProxyAddr        string        // RELAYOPS_PROXY_ADDR   - data plane listener
@@ -92,6 +95,9 @@ const MinDataplaneTokenLength = 32
 
 // Validate reports configuration that cannot work for the selected role.
 func (c Config) Validate() error {
+	if err := c.ValidateProduction(); err != nil {
+		return err
+	}
 	switch c.Role {
 	case RoleAll, RoleControlPlane:
 	case RoleGateway, RoleRelay:
@@ -141,6 +147,9 @@ func Load() Config {
 		redisURL = "" // in-memory rate limiting and quotas only
 	}
 	return Config{
+		Environment:      strings.ToLower(env("RELAYOPS_ENV", "development")),
+		DataDir:          DataDirectory(),
+		PersistentData:   envBool("RELAYOPS_PERSISTENT_DATA", false),
 		DatabaseURL:      env("RELAYOPS_DATABASE_URL", "postgres://postgres@localhost:5432/relayops?sslmode=disable"),
 		RedisURL:         redisURL,
 		ProxyAddr:        env("RELAYOPS_PROXY_ADDR", ":8080"),

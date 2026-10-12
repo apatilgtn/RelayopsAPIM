@@ -66,8 +66,10 @@ func (s *Server) createDataplaneCredential(w http.ResponseWriter, r *http.Reques
 
 // RuntimeInfo describes how this node was started, for the console.
 type RuntimeInfo struct {
-	Role          string
-	LogSampleRate float64
+	Environment     string
+	ProductionReady bool
+	Role            string
+	LogSampleRate   float64
 }
 
 // WithRuntimeInfo records startup settings shown by GET /api/system/runtime.
@@ -99,6 +101,8 @@ func (s *Server) systemRuntime(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
+		"environment":                    s.runtime.Environment,
+		"production_ready":               s.runtime.Environment == "production" && s.runtime.ProductionReady,
 		"node_id":                        s.nodeID,
 		"role":                           role,
 		"log_sample_rate":                rate,

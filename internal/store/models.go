@@ -567,12 +567,12 @@ func (s *Store) GetAPIKey(ctx context.Context, id string) (APIKey, error) {
 func (s *Store) GetConsumerByRawKey(ctx context.Context, rawKey string) (Consumer, error) {
 	h := HashKey(rawKey)
 	var c Consumer
-	err := s.Pool.QueryRow(ctx, `SELECT c.id, c.name, c.email, c.status, c.created_at, c.updated_at
+	err := s.Pool.QueryRow(ctx, `SELECT c.id, c.name, c.email, c.status, c.created_at, c.updated_at, c.tenant_id
 		FROM consumers c
 		JOIN api_keys k ON k.consumer_id = c.id
-		WHERE k.key_hash = $1 AND (k.active OR (k.grace_until IS NOT NULL AND k.grace_until > now()))
+		WHERE c.status='active' AND k.key_hash = $1 AND (k.active OR (k.grace_until IS NOT NULL AND k.grace_until > now()))
 		LIMIT 1`, h).
-		Scan(&c.ID, &c.Name, &c.Email, &c.Status, &c.CreatedAt, &c.UpdatedAt)
+		Scan(&c.ID, &c.Name, &c.Email, &c.Status, &c.CreatedAt, &c.UpdatedAt, &c.TenantID)
 	return c, mapErr(err)
 }
 
@@ -1053,6 +1053,17 @@ func (s *Store) publishRevision(ctx context.Context, actor, description, targetG
 
 	var newRev int64
 	err := pgx.BeginTxFunc(ctx, s.Pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead}, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `LOCK TABLE config_revisions IN SHARE ROW EXCLUSIVE MODE`); err != nil {
+			return err
+		}
+		existing, err := lockPublicationDraft(ctx, tx)
+		if err != nil {
+			return err
+		}
+		if existing > 0 {
+			newRev = existing
+			return nil
+		}
 		if err := assertNoCanary(ctx, tx); err != nil {
 			return err
 		}
@@ -1074,6 +1085,9 @@ func (s *Store) publishRevision(ctx context.Context, actor, description, targetG
 			return fmt.Errorf("insert config revision: %w", err)
 		}
 
+		if err := linkPublicationDraft(ctx, tx, newRev, actor); err != nil {
+			return err
+		}
 		_, err = tx.Exec(ctx, `SELECT pg_notify('relayops_config', json_build_object('table', 'config_revisions', 'op', 'UPDATE', 'revision', $1::bigint, 'at', now())::text)`, newRev)
 		return err
 	})

@@ -733,53 +733,13 @@ func (s *Server) getCanaryStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	gateEnforced := false
-	gateEligible := true
-	var gateReasons []string
+	gates := store.GateReport{Available: false, Eligible: false, Reasons: []string{"Gate checks unavailable"}}
 	if s.dbAvailable() {
-		rows, err := s.store.Pool.Query(r.Context(), `SELECT tenant_id, api_id, required_suite_ids, freshness_seconds FROM test_gate_policies WHERE enforcement_enabled = true`)
-		if err == nil {
-			defer rows.Close()
-			for rows.Next() {
-				var tID, aID string
-				var reqSuitesJSON []byte
-				var freshnessSeconds int
-				if err := rows.Scan(&tID, &aID, &reqSuitesJSON, &freshnessSeconds); err == nil {
-					gateEnforced = true
-					var reqSuites []string
-					_ = json.Unmarshal(reqSuitesJSON, &reqSuites)
-					if len(reqSuites) > 0 {
-						for _, reqSuiteID := range reqSuites {
-							var evID string
-							var verifiedAt time.Time
-							qErr := s.store.Pool.QueryRow(r.Context(), `
-								SELECT e.id, e.verified_at
-								FROM test_gate_evidence e
-								JOIN test_runs r ON r.id = e.run_id
-								WHERE e.tenant_id = $1 AND e.api_id = $2 AND e.revision = $3
-								  AND e.eligible = true AND r.suite_id = $4
-								ORDER BY e.verified_at DESC LIMIT 1`,
-								tID, aID, revID, reqSuiteID).Scan(&evID, &verifiedAt)
-							if qErr != nil {
-								gateEligible = false
-								gateReasons = append(gateReasons, fmt.Sprintf("Missing passing evidence for required suite '%s' on API %s", reqSuiteID, aID))
-							} else if freshnessSeconds > 0 && time.Since(verifiedAt) > time.Duration(freshnessSeconds)*time.Second {
-								gateEligible = false
-								gateReasons = append(gateReasons, fmt.Sprintf("Evidence expired for suite '%s' on API %s (verified %s ago)", reqSuiteID, aID, time.Since(verifiedAt).Round(time.Second)))
-							}
-						}
-					} else {
-						ev, _ := s.store.GetLatestEligibleEvidence(r.Context(), tID, aID, revID)
-						if ev == nil || !ev.Eligible {
-							gateEligible = false
-							gateReasons = append(gateReasons, fmt.Sprintf("Missing or ineligible test evidence for API %s", aID))
-						} else if freshnessSeconds > 0 && time.Since(ev.VerifiedAt) > time.Duration(freshnessSeconds)*time.Second {
-							gateEligible = false
-							gateReasons = append(gateReasons, fmt.Sprintf("Test evidence for API %s expired (verified %s ago)", aID, time.Since(ev.VerifiedAt).Round(time.Second)))
-						}
-					}
-				}
-			}
+		var gateErr error
+		gates, gateErr = s.store.EvaluateTestGates(r.Context(), revID)
+		if gateErr != nil {
+			s.fail(w, gateErr)
+			return
 		}
 	}
 
@@ -800,11 +760,7 @@ func (s *Server) getCanaryStatus(w http.ResponseWriter, r *http.Request) {
 		"canary_nodes":                 canaryNodes,
 		"standard_nodes":               standardNodes,
 		"comparison":                   stats,
-		"gate_status": map[string]any{
-			"enforced": gateEnforced,
-			"eligible": gateEligible,
-			"reasons":  gateReasons,
-		},
+		"gate_status":                  gates,
 	})
 }
 

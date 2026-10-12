@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Restore drill: prove the latest nightly backup can be restored and served.
+# Database-only restore drill. Secret recovery and complete DR remain unproven.
 #
 # Run on the RelayOps host as:  ./relayops-secrets run -- bash restore-drill.sh
 # (the backup storage credentials come from Vault, as for the backup itself).
@@ -100,3 +100,5 @@ if [ "$apis" -ne "$restored_apis" ]; then
 fi
 echo "DRILL PASSED"
 echo "== drill finished in $(( $(date +%s) - started ))s (download, restore, verify, boot)"
+
+printf "\nDATABASE-ONLY RESULT: complete recovery requires restored secrets and authenticated upstream access.\n"
