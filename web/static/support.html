@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Support · RelayOps</title>
+  <meta name="description" content="How to get help with RelayOps, report a problem, or report a security issue.">
+  <link rel="stylesheet" href="/legal/legal.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23c4f36b'/%3E%3Cpath d='M10 23V9h7a4 4 0 010 8h-7m6 0 6 6' fill='none' stroke='%23132022' stroke-width='3'/%3E%3C/svg%3E">
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<header class="top">
+  <a class="brand" href="/portal/"><span class="brand-symbol" aria-hidden="true">R</span>RelayOps</a>
+  <nav class="legal-nav" aria-label="Legal and support">
+    <a href="/legal/terms.html">Terms</a><a href="/legal/privacy.html">Privacy</a><a href="/support.html" aria-current="page">Support</a>
+  </nav>
+</header>
+<main id="content">
+  <h1>Support</h1>
+  <p class="updated">Early-access support, Sydney time (AEST/AEDT)</p>
+
+  <div class="contact">
+    <p><strong>Email:</strong> <a href="mailto:apatil@relayops.cloud?subject=RelayOps%20support">apatil@relayops.cloud</a></p>
+    <p>Include your workspace or application name, the API and time involved, and the request ID (the <code>X-Request-ID</code> response header) if you have one.</p>
+  </div>
+
+  <h2>What to expect</h2>
+  <table>
+    <thead><tr><th>Issue</th><th>Example</th><th>First response</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Urgent</strong></td><td>The gateway or console is down, or you suspect a credential has leaked</td><td>Same business day, and we aim for 4 hours</td></tr>
+      <tr><td><strong>Normal</strong></td><td>Something isn't working as expected</td><td>1 business day</td></tr>
+      <tr><td><strong>Question</strong></td><td>How do I…? Feature requests</td><td>2 business days</td></tr>
+    </tbody>
+  </table>
+  <p>During early access these are targets, not contractual commitments (see the <a href="/legal/terms.html">Terms</a>). Gateway and console health are monitored around the clock, so we are usually aware of an outage before you report it.</p>
+
+  <h2>Help yourself first</h2>
+  <ul>
+    <li><strong>Developer hub:</strong> browse APIs, try calls, and manage your keys at <a href="/portal/">/portal</a>.</li>
+    <li><strong>Request IDs:</strong> every gateway response carries <code>X-Request-ID</code>; administrators can look it up in Request logs to see exactly why a call was allowed or refused.</li>
+    <li><strong>Common refusals:</strong> <code>401</code> means a missing or invalid API key; <code>403</code> means the key has no active subscription to that API; <code>429</code> means a rate limit or quota was reached (for rate limits, the <code>Retry-After</code> header says how many seconds to wait).</li>
+  </ul>
+
+  <h2>Report a security issue</h2>
+  <p>Email <a href="mailto:apatil@relayops.cloud?subject=Security%20report">apatil@relayops.cloud</a> with the subject "Security report". Please give us a reasonable chance to fix the issue before disclosing it publicly, and don't access other people's data or disrupt the Service while testing. We will acknowledge reports within 2 business days.</p>
+
+  <h2>Privacy requests</h2>
+  <p>To access, correct or delete your personal information, see the <a href="/legal/privacy.html">Privacy Policy</a>.</p>
+</main>
+<footer><span>© 2026 RelayOps</span><span><a href="/legal/terms.html">Terms</a> · <a href="/legal/privacy.html">Privacy</a> · <a href="/support.html">Support</a></span></footer>
+</body>
+</html>

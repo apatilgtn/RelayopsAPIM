@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy Policy · RelayOps</title>
+  <meta name="description" content="What personal information RelayOps collects, why, where it is stored, and your choices.">
+  <link rel="stylesheet" href="/legal/legal.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23c4f36b'/%3E%3Cpath d='M10 23V9h7a4 4 0 010 8h-7m6 0 6 6' fill='none' stroke='%23132022' stroke-width='3'/%3E%3C/svg%3E">
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<header class="top">
+  <a class="brand" href="/portal/"><span class="brand-symbol" aria-hidden="true">R</span>RelayOps</a>
+  <nav class="legal-nav" aria-label="Legal and support">
+    <a href="/legal/terms.html">Terms</a><a href="/legal/privacy.html" aria-current="page">Privacy</a><a href="/support.html">Support</a>
+  </nav>
+</header>
+<main id="content">
+  <h1>Privacy Policy</h1>
+  <p class="updated">Last updated 13 October 2026</p>
+
+  <div class="summary">
+    <p><strong>In short:</strong> we collect what we need to run the Service: account details, application registrations, and request metadata for traffic through the gateway. We do not store the contents of requests or responses that pass through the gateway. Data is hosted in Sydney, Australia. We don't sell personal information or use advertising trackers.</p>
+  </div>
+
+  <h2>1. Who we are</h2>
+  <p>This policy explains how RelayOps ("we", "us") handles personal information when you use the RelayOps console, API gateway, developer hub and Orbit AI assistant (the "Service"). We handle personal information in line with the Australian Privacy Principles in the <em>Privacy Act 1988</em> (Cth).</p>
+
+  <h2>2. What we collect</h2>
+  <table>
+    <thead><tr><th>Information</th><th>Why we collect it</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Administrator accounts</strong>: name, email, team, role, a one-way hash of your password, and sign-in times</td><td>To give you secure access to the console and control what you can do</td></tr>
+      <tr><td><strong>Developer hub registrations</strong>: name, email, application name, the IP address used to register, and your API subscriptions</td><td>To issue and manage API access, and to prevent abuse of self-registration</td></tr>
+      <tr><td><strong>API keys and tokens</strong>: stored only as one-way hashes</td><td>To authenticate calls without being able to recover your secrets</td></tr>
+      <tr><td><strong>Gateway request metadata</strong>: time, API, consumer, method, path, status code, latency, response size, client IP address and error text. Only a sample of requests is recorded (currently 5%)</td><td>To operate, secure and troubleshoot the Service and show you analytics</td></tr>
+      <tr><td><strong>Audit records</strong>: which account made which configuration change, and when</td><td>Security and accountability</td></tr>
+      <tr><td><strong>Orbit AI questions</strong>: your question and the configuration and metrics needed to answer it, with secrets removed</td><td>To answer your question (see section 4)</td></tr>
+    </tbody>
+  </table>
+  <p>We do <strong>not</strong> store the bodies of requests or responses that pass through the gateway. Short-lived counters for rate limits and quotas are kept in memory only.</p>
+
+  <h2>3. How long we keep it</h2>
+  <ul>
+    <li><strong>Gateway request metadata:</strong> 72 hours, then deleted automatically.</li>
+    <li><strong>Accounts, registrations and configuration:</strong> while your account is active, and deleted on request (section 7).</li>
+    <li><strong>Audit records:</strong> kept for security and accountability. They can be exported and archived, and are removed only under a documented retention process.</li>
+    <li><strong>Backups:</strong> a full encrypted backup is taken daily for disaster recovery. Backups are kept only as long as needed for recovery and are then deleted.</li>
+  </ul>
+
+  <h2>4. Who we share it with</h2>
+  <p>We use these service providers to run the Service. They process information on our behalf and only for that purpose:</p>
+  <table>
+    <thead><tr><th>Provider</th><th>What for</th><th>Where</th></tr></thead>
+    <tbody>
+      <tr><td>Amazon Web Services</td><td>Servers that run the Service, and our monitoring alerts</td><td>Sydney, Australia</td></tr>
+      <tr><td>Supabase</td><td>Database and encrypted backup storage</td><td>Sydney, Australia</td></tr>
+      <tr><td>NVIDIA</td><td>AI model that answers Orbit AI questions, used only when you ask Orbit a question</td><td>United States</td></tr>
+    </tbody>
+  </table>
+  <p>Because Orbit AI uses a provider in the United States, your questions and the related context (with secrets removed) are disclosed overseas when you use Orbit. If you don't want this, don't use Orbit; the rest of the Service works without it.</p>
+  <p>We don't sell personal information. We will disclose it to others only if the law requires it, or to protect the safety and security of the Service and its users.</p>
+
+  <h2>5. Cookies and tracking</h2>
+  <p>We don't use advertising or analytics trackers. The console keeps your sign-in session in your browser's storage so you stay signed in; signing out removes it.</p>
+
+  <h2>6. Security</h2>
+  <p>Traffic is encrypted with TLS. Passwords, API keys and tokens are stored as one-way hashes, and stored secrets are encrypted. Administrator access is limited by role, changes are audit-logged, and the Service is monitored around the clock. No system is perfectly secure. If a data breach is likely to cause you serious harm, we will notify you and the Office of the Australian Information Commissioner as the Notifiable Data Breaches scheme requires.</p>
+
+  <h2>7. Your choices and rights</h2>
+  <p>You can ask to access the personal information we hold about you, correct it, or delete your account and data. Email us from the address on your account and we will respond within 30 days. You can also delete applications and API keys yourself in the developer hub.</p>
+
+  <h2>8. Complaints</h2>
+  <p>If you have a privacy concern, contact us first and we will try to resolve it within 30 days. If you're not satisfied, you can complain to the Office of the Australian Information Commissioner at <a href="https://www.oaic.gov.au/">oaic.gov.au</a>.</p>
+
+  <h2>9. Children</h2>
+  <p>The Service is for businesses and developers and is not intended for anyone under 18.</p>
+
+  <h2>10. Changes</h2>
+  <p>We will post updates here with a new date, and notify you of significant changes by email or in the console.</p>
+
+  <h2>11. Contact</h2>
+  <div class="contact"><p>Privacy questions and requests: <a href="mailto:apatil@relayops.cloud">apatil@relayops.cloud</a></p></div>
+</main>
+<footer><span>© 2026 RelayOps</span><span><a href="/legal/terms.html">Terms</a> · <a href="/legal/privacy.html">Privacy</a> · <a href="/support.html">Support</a></span></footer>
+</body>
+</html>
