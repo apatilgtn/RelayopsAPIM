@@ -629,6 +629,13 @@ func (s *Server) auth(next http.Handler) http.Handler {
 			return
 		}
 
+		// Release evidence is bound to the test environment it ran in, so
+		// repointing or removing an environment is a gate change.
+		if strings.HasPrefix(path, "/api/tests/environments/") && method != http.MethodGet && user.Role != "admin" && user.Role != "superadmin" {
+			writeErr(w, http.StatusForbidden, "forbidden", "admin or superadmin role is required to change or delete test environments")
+			return
+		}
+
 		// System maintenance operations require admin or superadmin
 		if strings.HasPrefix(path, "/api/system/maintenance") && user.Role != "admin" && user.Role != "superadmin" {
 			writeErr(w, http.StatusForbidden, "forbidden", "admin or superadmin role is required to run maintenance operations")
@@ -647,6 +654,14 @@ func (s *Server) auth(next http.Handler) http.Handler {
 				writeErr(w, http.StatusForbidden, "forbidden", "role 'developer' lacks administrative access to control plane")
 				return
 			}
+			// Developers write and run tests; deleting Test Studio resources and
+			// repointing environments (which release evidence is bound to) is
+			// for admins.
+			if strings.HasPrefix(path, "/api/tests/") && (method == http.MethodDelete ||
+				(strings.HasPrefix(path, "/api/tests/environments/") && method != http.MethodGet)) {
+				writeErr(w, http.StatusForbidden, "forbidden", "role 'developer' cannot delete Test Studio resources or change environments; requires 'admin' or 'superadmin'")
+				return
+			}
 		}
 
 		ctx := context.WithValue(r.Context(), userCtxKey{}, user)
@@ -655,11 +670,33 @@ func (s *Server) auth(next http.Handler) http.Handler {
 	})
 }
 
+// consoleCSP fits the console, portal and legal pages: every script is a
+// same-origin file (no inline scripts or handlers), styles use inline style
+// attributes, icons and favicons may be data: URIs, and the pages may not be
+// framed.
+const consoleCSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
+	"font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+
 func withCommonHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("X-Content-Type-Options", "nosniff")
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()")
+		h.Set("Content-Security-Policy", consoleCSP)
+		if RequestIsHTTPS(r) {
+			h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// RequestIsHTTPS reports whether the client reached us over HTTPS, directly or
+// through a TLS-terminating proxy such as Caddy. It only decides whether to
+// send HSTS, which browsers ignore on plain HTTP anyway.
+func RequestIsHTTPS(r *http.Request) bool {
+	return r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
 }
 
 func (s *Server) audit(r *http.Request, action, resType, resID string, details map[string]any) {

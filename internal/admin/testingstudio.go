@@ -201,6 +201,9 @@ func (s *Server) updateTestSuite(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusForbidden, "forbidden", "tenant access denied")
 		return
 	}
+	if !s.mayChangeGateSuite(w, r, id) {
+		return
+	}
 
 	var req struct {
 		Name        string                 `json:"name"`
@@ -264,6 +267,9 @@ func (s *Server) deleteTestSuite(w http.ResponseWriter, r *http.Request) {
 	sc := scopeFrom(r)
 	if !sc.allows(suite.TenantID) {
 		writeErr(w, http.StatusForbidden, "forbidden", "tenant access denied")
+		return
+	}
+	if !s.mayChangeGateSuite(w, r, id) {
 		return
 	}
 
@@ -1001,4 +1007,24 @@ func cleanEndpointPath(raw string) string {
 		raw = "/" + raw
 	}
 	return raw
+}
+
+// mayChangeGateSuite stops anyone below admin from editing or deleting a suite
+// that an enforced release gate requires: weakening its checks would let an
+// unsafe release pass, and deleting it would block every promotion.
+func (s *Server) mayChangeGateSuite(w http.ResponseWriter, r *http.Request, suiteID string) bool {
+	u, _ := r.Context().Value(userCtxKey{}).(store.AdminUser)
+	if u.Role == "admin" || u.Role == "superadmin" {
+		return true
+	}
+	gated, err := s.store.SuiteGatesRelease(r.Context(), suiteID)
+	if err != nil {
+		s.fail(w, err)
+		return false
+	}
+	if gated {
+		writeErr(w, http.StatusForbidden, "gate_suite_protected", "this suite is required by an enforced release gate; only an admin or superadmin can change or delete it")
+		return false
+	}
+	return true
 }

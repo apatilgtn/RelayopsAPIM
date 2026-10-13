@@ -90,6 +90,7 @@ type ctxKey struct{}
 
 // reqState carries per-request data from the handler into the proxy callbacks.
 type reqState struct {
+	internalCaller     bool // RelayOps' own runner (loopback or runner token)
 	route              *Route
 	mcp                *mcpExchange  // set for MCP JSON-RPC requests
 	grpc               *grpcExchange // set for gRPC calls
@@ -261,6 +262,9 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	rec := &recorder{ResponseWriter: w, st: st, aiMeter: ai.NewStreamMeter()}
 	rec.Header().Set("X-Request-ID", st.requestID)
+	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+		rec.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+	}
 
 	if r.URL.Path == "/__relayops/health" {
 		snap := g.snap.Load()
@@ -459,6 +463,7 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	st.internalCaller = authorizedRunner
 	if !authorizedRunner {
 		if targetCohort != "" {
 			r.Header.Del("X-RelayOps-Target-Cohort")
@@ -926,13 +931,21 @@ func (g *Gateway) reject(w http.ResponseWriter, st *reqState, status int, code, 
 		if st.decisionReason == "" || st.decisionReason == "processing" {
 			st.decisionReason = code
 		}
+		if st.anonymousOutsider() {
+			// A refused caller we cannot identify does not learn the API's
+			// internal ID, the configuration revision or its canary cohort.
+			h := w.Header()
+			h.Del("X-RelayOps-API-ID")
+			h.Del("X-RelayOps-Revision")
+			h.Del("X-RelayOps-Cohort")
+		}
 		if st.decisionPolicy != "" {
 			w.Header().Set("X-RelayOps-Decision-Policy", st.decisionPolicy)
 		}
 		if st.decisionReason != "" {
 			w.Header().Set("X-RelayOps-Decision-Reason", st.decisionReason)
 		}
-		if st.configRevision > 0 {
+		if st.configRevision > 0 && !st.anonymousOutsider() {
 			w.Header().Set("X-RelayOps-Revision", fmt.Sprintf("rev_%010d", st.configRevision))
 		}
 		if st.isGRPC && (st.grpc == nil || !st.grpc.wantJSON) {
@@ -1232,6 +1245,12 @@ func (r *recorder) Flush() {
 
 func (r *recorder) Unwrap() http.ResponseWriter { return r.ResponseWriter }
 
+// anonymousOutsider: no consumer was identified and the caller is not
+// RelayOps' own runner (whose release checks read the revision header).
+func (st *reqState) anonymousOutsider() bool {
+	return st != nil && st.consumerID == "" && !st.internalCaller
+}
+
 func writeError(w http.ResponseWriter, status int, code, msg string, st *reqState) {
 	body := map[string]any{"error": code, "message": msg}
 	if st != nil {
@@ -1240,7 +1259,7 @@ func writeError(w http.ResponseWriter, status int, code, msg string, st *reqStat
 		if st.decisionPolicy != "" {
 			body["policy"] = st.decisionPolicy
 		}
-		if st.configRevision > 0 {
+		if st.configRevision > 0 && !st.anonymousOutsider() {
 			body["revision"] = st.configRevision
 		}
 	}
@@ -1253,12 +1272,19 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// clientIP is the caller's address for rate limits, canary cohorts and logs.
+// X-Forwarded-For is trusted only when the request comes from a proxy on a
+// loopback or private address (such as Caddy in front of the gateway), and
+// then only the entry that proxy appended (the last one): earlier entries
+// are whatever the client sent and could be forged to dodge per-IP limits.
 func clientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if i := strings.Index(xff, ","); i > 0 {
-			return strings.TrimSpace(xff[:i])
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" && isLoopbackOrLocal(directPeerIP(r)) {
+		if i := strings.LastIndex(xff, ","); i >= 0 {
+			xff = xff[i+1:]
 		}
-		return strings.TrimSpace(xff)
+		if ip := strings.TrimSpace(xff); ip != "" {
+			return ip
+		}
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {

@@ -289,3 +289,10 @@ func sealReleaseDecision(ctx context.Context, tx pgx.Tx, rev int64, report GateR
 	_, err = tx.Exec(ctx, `INSERT INTO release_decisions(revision,evidence,evidence_digest) VALUES($1,$2,$3)`, rev, raw, "sha256:"+hex.EncodeToString(sum[:]))
 	return err
 }
+
+// SuiteGatesRelease reports whether an enforced gate policy requires the suite.
+func (s *Store) SuiteGatesRelease(ctx context.Context, suiteID string) (bool, error) {
+	var gated bool
+	err := s.Pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM test_gate_policies WHERE enforcement_enabled AND required_suite_ids ? $1)`, suiteID).Scan(&gated)
+	return gated, err
+}

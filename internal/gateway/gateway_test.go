@@ -795,3 +795,79 @@ func TestTargetCredentialValidation(t *testing.T) {
 		t.Fatalf("retry on 429 rejected: %v", err)
 	}
 }
+
+func keyedAPI(t *testing.T) (*Gateway, store.API) {
+	t.Helper()
+	up := newUpstream(t)
+	g := newTestGateway(t)
+	a := testAPI("keyed", "/keyed", up.srv.URL)
+	a.AuthType = "api_key"
+	g.load(t, store.SnapshotData{APIs: []store.API{a}})
+	return g, a
+}
+
+func TestAnonymousRefusalHidesInternals(t *testing.T) {
+	g, _ := keyedAPI(t)
+	rec := do(g, "GET", "/keyed/x", nil, "")
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status %d, want 401", rec.Code)
+	}
+	for _, h := range []string{"X-RelayOps-API-ID", "X-RelayOps-Revision", "X-RelayOps-Cohort"} {
+		if v := rec.Header().Get(h); v != "" {
+			t.Errorf("anonymous refusal exposes %s: %q", h, v)
+		}
+	}
+	var body map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &body)
+	for _, k := range []string{"revision"} {
+		if _, ok := body[k]; ok {
+			t.Errorf("anonymous refusal body exposes %q: %s", k, rec.Body.String())
+		}
+	}
+	if body["error"] == nil || body["request_id"] == nil || rec.Header().Get("X-Request-ID") == "" {
+		t.Errorf("refusal must still carry the error code and request ID: %s", rec.Body.String())
+	}
+}
+
+// RelayOps' own runner (on loopback) keeps the revision header its release
+// checks rely on.
+func TestInternalCallerRefusalKeepsRevision(t *testing.T) {
+	g, _ := keyedAPI(t)
+	req := httptest.NewRequest("GET", "/keyed/x", nil)
+	req.RemoteAddr = "127.0.0.1:41000"
+	rec := httptest.NewRecorder()
+	g.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized || rec.Header().Get("X-RelayOps-Revision") == "" || rec.Header().Get("X-RelayOps-Decision-Reason") == "" {
+		t.Fatalf("internal caller: status %d, revision %q, reason %q", rec.Code, rec.Header().Get("X-RelayOps-Revision"), rec.Header().Get("X-RelayOps-Decision-Reason"))
+	}
+}
+
+func TestClientIPIgnoresForgedForwardedFor(t *testing.T) {
+	cases := []struct{ peer, xff, want string }{
+		{"203.0.113.9:5000", "1.2.3.4", "203.0.113.9"},             // public caller: header ignored
+		{"10.0.0.5:5000", "1.2.3.4", "1.2.3.4"},                    // trusted proxy hop
+		{"10.0.0.5:5000", "6.6.6.6, 198.51.100.7", "198.51.100.7"}, // forged first entry ignored
+		{"127.0.0.1:5000", "", "127.0.0.1"},
+	}
+	for _, c := range cases {
+		r := httptest.NewRequest("GET", "/", nil)
+		r.RemoteAddr = c.peer
+		if c.xff != "" {
+			r.Header.Set("X-Forwarded-For", c.xff)
+		}
+		if got := clientIP(r); got != c.want {
+			t.Errorf("peer %s xff %q: clientIP=%q, want %q", c.peer, c.xff, got, c.want)
+		}
+	}
+}
+
+func TestGatewaySendsHSTSOverHTTPS(t *testing.T) {
+	g, _ := keyedAPI(t)
+	if rec := do(g, "GET", "/keyed/x", nil, ""); rec.Header().Get("Strict-Transport-Security") != "" {
+		t.Error("HSTS sent over plain HTTP")
+	}
+	rec := do(g, "GET", "/keyed/x", map[string]string{"X-Forwarded-Proto": "https"}, "")
+	if !strings.Contains(rec.Header().Get("Strict-Transport-Security"), "max-age=") {
+		t.Errorf("HSTS missing over HTTPS: %q", rec.Header().Get("Strict-Transport-Security"))
+	}
+}
