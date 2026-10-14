@@ -1,0 +1,16 @@
+# Quickstart: one API protected by an API key, served by the mock backend
+# that docker compose starts beside RelayOps.
+#   docker compose exec -T gateway relayopsctl apply -f - --auto-approve --token relayops-admin < examples/quickstart/relayops.yaml
+format_version: "1.0"
+
+apis:
+  - name: Demo API
+    description: Echoes your request back. Try /demo/hello, /demo/status/503 or /demo/delay/300.
+    base_path: /demo
+    upstream_url: http://mock:7070
+    strip_path: true
+    auth_type: api_key
+    visibility: public
+    require_approval: false
+    rate_limit_per_minute: 120
+    enabled: true

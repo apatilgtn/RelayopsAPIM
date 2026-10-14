@@ -1,6 +1,6 @@
 # =============================================================================
 # RelayOps APIM: Turnkey Local Stack
-# Start with one command: docker compose up -d
+# Start with one command: docker compose up -d --build (first build: a few minutes)
 #
 # Access Points:
 #   - Control Plane (Console & Test Studio): http://localhost:9090
@@ -24,8 +24,8 @@ services:
       POSTGRES_USER: relayops
       POSTGRES_PASSWORD: relayops
       POSTGRES_DB: relayops
-    ports:
-      - "5433:5432"
+    # Not published on the host: RelayOps reaches it inside the compose network.
+    # For a psql shell: docker compose exec postgres psql -U relayops
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -35,8 +35,10 @@ services:
       retries: 20
 
   gateway:
-    image: ghcr.io/relayops/relayops:latest
-    build: .
+    image: relayops:local
+    build:
+      context: .
+      dockerfile: Dockerfile.source
     restart: unless-stopped
     depends_on:
       postgres:
@@ -57,8 +59,8 @@ services:
 
   # Gateway-only node: no database URL; configuration comes from the control plane.
   gateway-edge:
-    image: ghcr.io/relayops/relayops:latest
-    build: .
+    image: relayops:local # built by the gateway service
+    pull_policy: never
     restart: unless-stopped
     profiles: ["split"]
     depends_on: [gateway]
@@ -76,8 +78,8 @@ services:
       - "9091:9091"
 
   mock:
-    image: ghcr.io/relayops/relayops:latest
-    build: .
+    image: relayops:local # built by the gateway service
+    pull_policy: never
     restart: unless-stopped
     entrypoint: ["/usr/local/bin/mockupstream", "-addr", ":7070"]
     ports:

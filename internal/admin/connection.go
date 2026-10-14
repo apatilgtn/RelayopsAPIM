@@ -32,10 +32,12 @@ func (s *Server) requestConsumerSubscription(w http.ResponseWriter, r *http.Requ
 		}
 		if in.PlanID != nil {
 			var pt string
-			if err := tx.QueryRow(r.Context(), `SELECT tenant_id FROM plans WHERE id=$1 FOR SHARE`, *in.PlanID).Scan(&pt); err != nil {
+			var selfService bool
+			if err := tx.QueryRow(r.Context(), `SELECT tenant_id, self_service FROM plans WHERE id=$1 FOR SHARE`, *in.PlanID).Scan(&pt, &selfService); err != nil {
 				return err
 			}
-			if pt != tenant {
+			// Developers may only pick a plan offered in the portal.
+			if pt != tenant || !selfService {
 				return store.ErrCrossTenant
 			}
 		}

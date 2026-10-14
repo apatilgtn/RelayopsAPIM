@@ -1,0 +1,21 @@
+# Builds RelayOps from source, so `docker compose up` works from a fresh clone
+# with nothing but Docker installed. (The plain Dockerfile packages binaries
+# that CI has already built; this one compiles them itself.)
+FROM golang:1.26-alpine AS build
+WORKDIR /src
+ENV CGO_ENABLED=0 GOTOOLCHAIN=auto
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN for c in relayops relayopsctl mockupstream relayops-secrets; do \
+      go build -trimpath -ldflags "-s -w" -o /out/$c ./cmd/$c || exit 1; \
+    done
+
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=build /out/ /usr/local/bin/
+# The last-known-good config cache is written to ./data; mount a volume there
+# when the root filesystem is read-only.
+WORKDIR /home/nonroot
+# 8080 proxy, 9090 control plane, 9091 status listener of gateway-only nodes
+EXPOSE 8080 9090 9091
+ENTRYPOINT ["/usr/local/bin/relayops"]

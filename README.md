@@ -16,40 +16,23 @@ A single lightweight Go binary executes the high-throughput gateway (data plane)
 
 ---
 
-## ⚡ 30-Second Zero-Friction Quickstart
+## Quickstart (5 minutes)
 
-Launch the complete local stack with a single command (requires Docker):
-
-```bash
-docker compose up -d
-```
-
-### Access Points
-
-| Component | URL | Purpose & Features |
-|---|---|---|
-| **Control Plane Console** | [http://localhost:9090](http://localhost:9090) | Admin dashboard, live traffic stream, Test Studio gates, SCIM & RBAC (Token: `relayops-admin`) |
-| **Developer Portal** | [http://localhost:9090/portal](http://localhost:9090/portal) | Interactive API catalog, OpenAPI downloads, multi-language snippets (`cURL`, `Node.js`, `Python`), and self-service key generator |
-| **Data Plane Gateway** | [http://localhost:8080](http://localhost:8080) | High-performance reverse proxy, rate limiting, canary routing, circuit breaking, and WebSocket/SSE streaming |
-| **Mock Upstream & LLM Streamer**| [http://localhost:7070](http://localhost:7070) | Simulated backend for REST microservices and OpenAI-compatible streaming deltas |
-| **Prometheus Metrics** | [http://localhost:9090/metrics](http://localhost:9090/metrics) | Real-time gateway latency histograms, error rates, and fleet convergence counters |
-
-### 1-Minute Verification
-
-Apply the included production-ready GitOps configuration:
+You need Docker and git. RelayOps builds from source inside Docker:
 
 ```bash
-# Apply declarative APIs, plans, and traffic policies in one shot
-export RELAYOPS_URL="http://localhost:9090"
-export RELAYOPS_TOKEN="relayops-admin"
-
-relayopsctl apply -f examples/gitops-quickstart/relayops.yaml --auto-approve
-
-# Test the public weather proxy through the gateway
-curl -i "http://localhost:8080/weather/v1/forecast?latitude=52.52&longitude=13.41"
+git clone https://github.com/apatilgtn/RelayopsAPIM.git
+cd RelayopsAPIM
+docker compose up -d --build
 ```
 
-Explore the complete [examples/gitops-quickstart](examples/gitops-quickstart/README.md) for automated synthetic test assertion gates and canary deployment walkthroughs.
+| Component | URL |
+|---|---|
+| Console (administrator token `relayops-admin`) | http://localhost:9090 |
+| Developer portal | http://localhost:9090/portal |
+| API gateway | http://localhost:8080 |
+
+Then follow **[docs/QUICKSTART.md](docs/QUICKSTART.md)**: publish an API, get a key from the developer portal, and ship a broken release as a canary that RelayOps rolls back by itself within seconds, while callers on the stable version see no errors.
 
 ---
 

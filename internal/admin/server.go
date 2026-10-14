@@ -2472,14 +2472,24 @@ func (s *Server) createPlan(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) updatePlan(w http.ResponseWriter, r *http.Request) {
-	var p store.Plan
-	if !decode(w, r, &p) {
+	// self_service is optional here: an edit that does not mention it keeps the
+	// plan's current setting rather than silently withdrawing it from the portal.
+	var in struct {
+		store.Plan
+		SelfService *bool `json:"self_service"`
+	}
+	if !decode(w, r, &in) {
 		return
 	}
+	p := in.Plan
 	p.ID = r.PathValue("id")
 	existing, ok := s.scopedPlan(w, r, p.ID)
 	if !ok {
 		return
+	}
+	p.SelfService = existing.SelfService
+	if in.SelfService != nil {
+		p.SelfService = *in.SelfService
 	}
 	if err := validatePlan(&p); err != nil {
 		writeErr(w, http.StatusBadRequest, "validation_failed", err.Error())
@@ -3852,7 +3862,8 @@ func (s *Server) portalCatalog(w http.ResponseWriter, r *http.Request) {
 	}
 	plans := []store.Plan{}
 	for _, p := range allPlans {
-		if onlyTenant == "" || p.TenantID == onlyTenant {
+		// Only plans an operator marked self-service are offered to developers.
+		if p.SelfService && (onlyTenant == "" || p.TenantID == onlyTenant) {
 			plans = append(plans, p)
 		}
 	}
@@ -3965,8 +3976,8 @@ func (s *Server) portalRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	if in.PlanID != nil {
 		plan, err := s.store.GetPlan(r.Context(), *in.PlanID)
-		if err != nil || plan.TenantID != tenant {
-			writeErr(w, 400, "invalid_plan", "choose a plan belonging to this API tenant")
+		if err != nil || plan.TenantID != tenant || !plan.SelfService {
+			writeErr(w, 400, "invalid_plan", "choose one of the plans offered in the developer portal for this API")
 			return
 		}
 	}

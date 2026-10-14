@@ -93,3 +93,46 @@ func TestConsoleSecurityHeaders(t *testing.T) {
 		t.Errorf("HSTS missing behind an HTTPS proxy: %q", rec.Header().Get("Strict-Transport-Security"))
 	}
 }
+
+// The developer portal offers, and self-registration accepts, only plans an
+// operator marked self-service: before this a self-registered developer could
+// choose an internal "Unlimited" plan by its ID.
+func TestIntegrationPortalOffersOnlySelfServicePlans(t *testing.T) {
+	st := openAdminTestStore(t)
+	h := newControlPlane(t, st, "cp-plans").Handler()
+	platform := client{t: t, h: h, token: "test-admin-token"}
+	var unlimited map[string]any // seeded by the migrations, admin-only
+	for _, p := range platform.list("/api/plans") {
+		if p["name"] == "Unlimited" {
+			unlimited = p
+		}
+	}
+	if unlimited == nil || unlimited["self_service"] != false {
+		t.Fatalf("seeded Unlimited plan must exist and not be self-service: %v", unlimited)
+	}
+	starter := platform.must("POST", "/api/plans", `{"name":"Starter","rate_limit_per_minute":60,"self_service":true}`, 201)
+	platform.must("POST", "/api/apis", `{"name":"demo","base_path":"/demo","upstream_url":"http://127.0.0.1:1","auth_type":"api_key","visibility":"public"}`, 201)
+	apis := platform.list("/api/apis")
+	apiID := apis[0]["id"].(string)
+
+	anon := client{t: t, h: h}
+	rec := anon.do("GET", "/portal/api/catalog", "")
+	body := rec.Body.String()
+	if !strings.Contains(body, `"Starter"`) || strings.Contains(body, `"Unlimited"`) {
+		t.Fatalf("catalog plans: want Starter only: %s", body)
+	}
+	reg := func(planID string) int {
+		return anon.do("POST", "/portal/api/register", `{"name":"app-`+planID[:6]+`","email":"dev-`+planID[:6]+`@example.com","api_ids":["`+apiID+`"],"plan_id":"`+planID+`"}`).Code
+	}
+	if code := reg(unlimited["id"].(string)); code != 400 {
+		t.Errorf("self-registration with an admin-only plan: %d, want 400", code)
+	}
+	if code := reg(starter["id"].(string)); code != 200 && code != 201 {
+		t.Errorf("self-registration with a self-service plan: %d", code)
+	}
+	// An edit that does not mention self_service keeps the current setting.
+	updated := platform.must("PUT", "/api/plans/"+starter["id"].(string), `{"name":"Starter","rate_limit_per_minute":120}`, 200)
+	if updated["self_service"] != true {
+		t.Errorf("editing a plan without self_service cleared it: %v", updated["self_service"])
+	}
+}

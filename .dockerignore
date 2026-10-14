@@ -19,3 +19,9 @@ tools
 .aws
 .codex
 .agents
+
+# Quickstart build-from-source: never send local tooling or test output.
+e2e/node_modules
+test-results
+reports
+research_notes

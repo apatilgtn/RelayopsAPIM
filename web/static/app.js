@@ -3361,6 +3361,7 @@
                 <th>Rate Limit (min)</th>
                 <th>Daily Quota</th>
                 <th>Monthly Quota</th>
+                <th>Portal</th>
                 <th>Created</th>
                 <th>Actions</th>
               </tr>
@@ -3373,13 +3374,14 @@
                   <td>${limitText(p.rate_limit_per_minute)}</td>
                   <td>${p.quota_per_day > 0 ? fmtNum(p.quota_per_day) + '/day' : 'unlimited'}</td>
                   <td>${p.quota_per_month > 0 ? fmtNum(p.quota_per_month) + '/month' : 'unlimited'}</td>
+                  <td>${p.self_service ? '<span class="tag success">Self-service</span>' : '<span class="muted">Admin only</span>'}</td>
                   <td class="muted">${fmtDate(p.created_at)}</td>
                   <td class="actions">
                     <button class="button small" data-edit="${p.id}">Edit</button>
                     <button class="button small danger" data-del="${p.id}">Delete</button>
                   </td>
                 </tr>
-              `).join('') || '<tr><td colspan="7" class="empty">No plans defined yet.</td></tr>'}
+              `).join('') || '<tr><td colspan="8" class="empty">No plans defined yet.</td></tr>'}
             </tbody>
           </table>
         </div>
@@ -3395,7 +3397,8 @@
           { name: 'rate_limit_per_minute', label: 'Rate Limit (req/min)', type: 'number', value: p?.rate_limit_per_minute ?? 60, help: '0 = unlimited' },
           { name: 'quota_per_day', label: 'Daily Quota', type: 'number', value: p?.quota_per_day ?? 0, help: '0 = unlimited' }
         ],
-        { name: 'quota_per_month', label: 'Monthly Quota', type: 'number', value: p?.quota_per_month ?? 0, help: '0 = unlimited' }
+        { name: 'quota_per_month', label: 'Monthly Quota', type: 'number', value: p?.quota_per_month ?? 0, help: '0 = unlimited' },
+        { name: 'self_service', label: 'Developers can choose this plan in the developer portal', type: 'checkbox', value: p?.self_service ?? false, help: 'Leave off for internal, partner or unlimited plans: only an administrator can assign those.' }
       ],
       onSubmit: (v) => (p ? api('PUT', `/api/plans/${p.id}`, v) : api('POST', '/api/plans', v))
     });

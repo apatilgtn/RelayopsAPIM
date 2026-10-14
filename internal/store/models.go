@@ -20,17 +20,20 @@ import (
 // ---------------------------------------------------------------------------
 
 type Plan struct {
-	ID                 string    `json:"id"`
-	TenantID           string    `json:"tenant_id"`
-	Name               string    `json:"name"`
-	Description        string    `json:"description"`
-	RateLimitPerMinute int       `json:"rate_limit_per_minute"`
-	QuotaPerDay        int       `json:"quota_per_day"`
-	QuotaPerMonth      int       `json:"quota_per_month"`
-	PriceMonthlyUSD    float64   `json:"price_monthly_usd"`
-	Tier               string    `json:"tier"`
-	CreatedAt          time.Time `json:"created_at"`
-	UpdatedAt          time.Time `json:"updated_at"`
+	ID                 string  `json:"id"`
+	TenantID           string  `json:"tenant_id"`
+	Name               string  `json:"name"`
+	Description        string  `json:"description"`
+	RateLimitPerMinute int     `json:"rate_limit_per_minute"`
+	QuotaPerDay        int     `json:"quota_per_day"`
+	QuotaPerMonth      int     `json:"quota_per_month"`
+	PriceMonthlyUSD    float64 `json:"price_monthly_usd"`
+	Tier               string  `json:"tier"`
+	// SelfService plans are the only ones a developer can choose for
+	// themselves in the developer portal.
+	SelfService bool      `json:"self_service"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 type API struct {
@@ -262,11 +265,11 @@ func (s *Store) GetRolloutState(ctx context.Context) (stable, canary int64, err 
 // Plans
 // ---------------------------------------------------------------------------
 
-const planCols = `id, name, description, rate_limit_per_minute, quota_per_day, quota_per_month, price_monthly_usd, tier, created_at, updated_at, tenant_id`
+const planCols = `id, name, description, rate_limit_per_minute, quota_per_day, quota_per_month, price_monthly_usd, tier, created_at, updated_at, tenant_id, self_service`
 
 func scanPlan(row pgx.Row) (Plan, error) {
 	var p Plan
-	err := row.Scan(&p.ID, &p.Name, &p.Description, &p.RateLimitPerMinute, &p.QuotaPerDay, &p.QuotaPerMonth, &p.PriceMonthlyUSD, &p.Tier, &p.CreatedAt, &p.UpdatedAt, &p.TenantID)
+	err := row.Scan(&p.ID, &p.Name, &p.Description, &p.RateLimitPerMinute, &p.QuotaPerDay, &p.QuotaPerMonth, &p.PriceMonthlyUSD, &p.Tier, &p.CreatedAt, &p.UpdatedAt, &p.TenantID, &p.SelfService)
 	return p, mapErr(err)
 }
 
@@ -297,8 +300,8 @@ func (s *Store) CreatePlan(ctx context.Context, p Plan) (Plan, error) {
 		tier = "free"
 	}
 	return scanPlan(s.Pool.QueryRow(ctx,
-		`INSERT INTO plans (name, description, rate_limit_per_minute, quota_per_day, quota_per_month, price_monthly_usd, tier, tenant_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING `+planCols,
-		p.Name, p.Description, p.RateLimitPerMinute, p.QuotaPerDay, p.QuotaPerMonth, p.PriceMonthlyUSD, tier, TenantOrDefault(p.TenantID)))
+		`INSERT INTO plans (name, description, rate_limit_per_minute, quota_per_day, quota_per_month, price_monthly_usd, tier, tenant_id, self_service) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING `+planCols,
+		p.Name, p.Description, p.RateLimitPerMinute, p.QuotaPerDay, p.QuotaPerMonth, p.PriceMonthlyUSD, tier, TenantOrDefault(p.TenantID), p.SelfService))
 }
 
 func (s *Store) UpdatePlan(ctx context.Context, p Plan) (Plan, error) {
@@ -307,8 +310,8 @@ func (s *Store) UpdatePlan(ctx context.Context, p Plan) (Plan, error) {
 		tier = "free"
 	}
 	return scanPlan(s.Pool.QueryRow(ctx,
-		`UPDATE plans SET name=$2, description=$3, rate_limit_per_minute=$4, quota_per_day=$5, quota_per_month=$6, price_monthly_usd=$7, tier=$8, updated_at=now() WHERE id=$1 RETURNING `+planCols,
-		p.ID, p.Name, p.Description, p.RateLimitPerMinute, p.QuotaPerDay, p.QuotaPerMonth, p.PriceMonthlyUSD, tier))
+		`UPDATE plans SET name=$2, description=$3, rate_limit_per_minute=$4, quota_per_day=$5, quota_per_month=$6, price_monthly_usd=$7, tier=$8, self_service=$9, updated_at=now() WHERE id=$1 RETURNING `+planCols,
+		p.ID, p.Name, p.Description, p.RateLimitPerMinute, p.QuotaPerDay, p.QuotaPerMonth, p.PriceMonthlyUSD, tier, p.SelfService))
 }
 
 func (s *Store) DeletePlan(ctx context.Context, id string) error {
@@ -1271,8 +1274,8 @@ func (s *Store) CreatePlanAtomic(ctx context.Context, p Plan, actor, description
 			tier = "free"
 		}
 		created, err = scanPlan(tx.QueryRow(ctx,
-			`INSERT INTO plans (name, description, rate_limit_per_minute, quota_per_day, quota_per_month, price_monthly_usd, tier, tenant_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING `+planCols,
-			p.Name, p.Description, p.RateLimitPerMinute, p.QuotaPerDay, p.QuotaPerMonth, p.PriceMonthlyUSD, tier, TenantOrDefault(p.TenantID)))
+			`INSERT INTO plans (name, description, rate_limit_per_minute, quota_per_day, quota_per_month, price_monthly_usd, tier, tenant_id, self_service) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING `+planCols,
+			p.Name, p.Description, p.RateLimitPerMinute, p.QuotaPerDay, p.QuotaPerMonth, p.PriceMonthlyUSD, tier, TenantOrDefault(p.TenantID), p.SelfService))
 		return err
 	})
 	return created, rev, err
@@ -1287,8 +1290,8 @@ func (s *Store) UpdatePlanAtomic(ctx context.Context, p Plan, actor, description
 			tier = "free"
 		}
 		updated, err = scanPlan(tx.QueryRow(ctx,
-			`UPDATE plans SET name=$2, description=$3, rate_limit_per_minute=$4, quota_per_day=$5, quota_per_month=$6, price_monthly_usd=$7, tier=$8, updated_at=now() WHERE id=$1 RETURNING `+planCols,
-			p.ID, p.Name, p.Description, p.RateLimitPerMinute, p.QuotaPerDay, p.QuotaPerMonth, p.PriceMonthlyUSD, tier))
+			`UPDATE plans SET name=$2, description=$3, rate_limit_per_minute=$4, quota_per_day=$5, quota_per_month=$6, price_monthly_usd=$7, tier=$8, self_service=$9, updated_at=now() WHERE id=$1 RETURNING `+planCols,
+			p.ID, p.Name, p.Description, p.RateLimitPerMinute, p.QuotaPerDay, p.QuotaPerMonth, p.PriceMonthlyUSD, tier, p.SelfService))
 		return err
 	})
 	return updated, rev, err
