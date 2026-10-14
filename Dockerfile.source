@@ -1,14 +1,17 @@
 # Builds RelayOps from source, so `docker compose up` works from a fresh clone
 # with nothing but Docker installed. (The plain Dockerfile packages binaries
-# that CI has already built; this one compiles them itself.)
-FROM golang:1.26-alpine AS build
+# that CI has already built; this one compiles them itself.) CI also uses it
+# to publish the multi-architecture image: Go cross-compiles on the build
+# machine's own architecture, so arm64 needs no emulation.
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
+ARG TARGETOS TARGETARCH
 WORKDIR /src
 ENV CGO_ENABLED=0 GOTOOLCHAIN=auto
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 RUN for c in relayops relayopsctl mockupstream relayops-secrets; do \
-      go build -trimpath -ldflags "-s -w" -o /out/$c ./cmd/$c || exit 1; \
+      GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} go build -trimpath -ldflags "-s -w" -o /out/$c ./cmd/$c || exit 1; \
     done
 
 FROM gcr.io/distroless/static-debian12:nonroot

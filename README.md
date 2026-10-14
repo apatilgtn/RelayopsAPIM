@@ -327,6 +327,13 @@ Without a model, the console still shows Orbit with setup instructions, and `POS
 
 - **Kubernetes.** Use [deploy/helm/relayops](deploy/helm/relayops). It needs an external PostgreSQL, set with `database.url` or `database.existingSecret`. Optional extras are Redis, dedicated canary nodes, an HPA, a PDB, Ingress, a ServiceMonitor and OTLP export. Pods run non-root with a read-only root filesystem. The admin token is generated once and kept across upgrades.
 - **Containers.** The image contains `relayops`, `relayopsctl` and `mockupstream`. `docker compose up` runs Postgres, the gateway and the mock backend.
+- **Published image.** `ghcr.io/apatilgtn/relayops` (linux/amd64 and linux/arm64), built by CI after every passing build of `main` (`latest`, `main`, `sha-<commit>`) and for each release tag. Each image is signed with Sigstore; check it before you run it:
+
+  ```bash
+  cosign verify ghcr.io/apatilgtn/relayops:latest \
+    --certificate-identity-regexp 'https://github.com/apatilgtn/RelayopsAPIM/' \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com
+  ```
 - **Database outages.** Running gateways keep serving the configuration they have in memory, and catch up automatically when Postgres returns. A node that starts while Postgres is down serves its own last-known-good cache (`data/last_known_good_config.<node-id>.json`). Request logs that cannot be written are spooled to `data/request_log_spool.<node-id>.jsonl`. The spool is capped by `RELAYOPS_LOG_SPOOL_MB`, 256 MB by default. It is replayed in order once Postgres is back, with at-least-once delivery. Losses are counted in `relayops_request_logs_dropped_total{reason}`. The control plane answers admin and portal API calls with `503 database_unavailable`. `/metrics` stays up and reports `relayops_control_plane_database_up 0`.
 - **Scaling.** Run N nodes against the same Postgres. They all hot-reload from the same NOTIFY stream. Set `RELAYOPS_REDIS_URL` for exact cluster-wide rate limits and quotas, otherwise limits apply per node. Partition `request_logs` or ship logs elsewhere at tens of millions of rows per day.
 - **Split deployment (gateway-only nodes).** Gateways can run without database access.

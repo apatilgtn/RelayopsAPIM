@@ -213,3 +213,61 @@ jobs:
           gh release create "$RELEASE_TAG" --draft --verify-tag --title "$RELEASE_TAG" \
             --notes-file docs/enterprise/RELEASE_REVIEW.md \
             release/relayops-linux-amd64.tar.gz release/SHA256SUMS release/SHA256SUMS.sigstore.json release/evidence/*.json
+
+  # Published only after every test, the browser end-to-end suite and the
+  # vulnerability scans pass. main -> latest, main, sha-<commit>; a v1.2.3 tag
+  # adds 1.2.3 and 1.2. Each image is signed keylessly with the workflow's
+  # GitHub identity: verify with
+  #   cosign verify ghcr.io/apatilgtn/relayops:latest \
+  #     --certificate-identity-regexp 'https://github.com/apatilgtn/RelayopsAPIM/' \
+  #     --certificate-oidc-issuer https://token.actions.githubusercontent.com
+  publish-image:
+    name: Publish container image
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    needs: [test, package, e2e, security]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/relayops
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=main,enable={{is_default_branch}}
+            type=sha,prefix=sha-
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+          labels: |
+            org.opencontainers.image.title=RelayOps
+            org.opencontainers.image.description=Open-source API management with safe releases: gateway, control plane and developer portal
+            org.opencontainers.image.licenses=Apache-2.0
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.source
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - uses: sigstore/cosign-installer@v3
+      - name: Sign the image (keyless, GitHub OIDC)
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          IMAGE: ghcr.io/${{ github.repository_owner }}/relayops
+        run: cosign sign --yes "${IMAGE}@${DIGEST}"

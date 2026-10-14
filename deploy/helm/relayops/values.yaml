@@ -1,8 +1,10 @@
 # Default values for the RelayOps chart.
 
 image:
-  repository: ghcr.io/relayops/relayops
-  tag: ""            # defaults to the chart appVersion
+  repository: ghcr.io/apatilgtn/relayops
+  # Published by CI after every passing build of main (latest, main, sha-<commit>)
+  # and for each release tag (e.g. 1.2.3). Pin a version or sha- tag in production.
+  tag: "latest"
   pullPolicy: IfNotPresent
 imagePullSecrets: []
 
