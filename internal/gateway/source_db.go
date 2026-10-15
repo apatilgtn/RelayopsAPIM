@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 
+	"github.com/relayops/apim/internal/certs"
 	"github.com/relayops/apim/internal/store"
 )
 
@@ -40,6 +41,11 @@ type NodeAck struct {
 	TookMS         float64 `json:"took_ms"`
 	NodeGroup      string  `json:"node_group"`
 	IsCanary       bool    `json:"is_canary"`
+	// Certificates the node holds (metadata only). Sent when the list
+	// changed or is due for a refresh; CertificatesIncluded tells an empty
+	// list apart from one not sent.
+	Certificates         []certs.Status `json:"certificates,omitempty"`
+	CertificatesIncluded bool           `json:"certificates_included,omitempty"`
 }
 
 // DBSource reads configuration straight from Postgres and follows changes
@@ -62,7 +68,16 @@ func (d *DBSource) Load(ctx context.Context, nodeGroup string, isCanary bool) (s
 }
 
 func (d *DBSource) Ack(ctx context.Context, a NodeAck) error {
-	return d.store.AcknowledgeRevisionWithCanary(ctx, a.NodeID, a.Revision, a.CanaryRevision, a.Routes, a.Keys, a.TookMS, a.NodeGroup, a.IsCanary)
+	if err := d.store.AcknowledgeRevisionWithCanary(ctx, a.NodeID, a.Revision, a.CanaryRevision, a.Routes, a.Keys, a.TookMS, a.NodeGroup, a.IsCanary); err != nil {
+		return err
+	}
+	if a.CertificatesIncluded {
+		// Best effort: a failed report must never cost the node its liveness.
+		if err := d.store.RecordNodeCertificates(ctx, a.NodeID, a.Certificates); err != nil {
+			slog.Warn("certificate report not recorded", "node", a.NodeID, "err", err)
+		}
+	}
+	return nil
 }
 
 func (d *DBSource) Watch(ctx context.Context, notify func(reason string)) error {

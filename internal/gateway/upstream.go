@@ -63,12 +63,13 @@ type targetState struct {
 }
 
 type upstreamRegistry struct {
-	mu     sync.Mutex
-	states map[string]*targetState
+	mu       sync.Mutex
+	states   map[string]*targetState
+	tlsCache map[string]*upstreamTLS // resolved upstream TLS by digest
 }
 
 func newUpstreamRegistry() *upstreamRegistry {
-	return &upstreamRegistry{states: map[string]*targetState{}}
+	return &upstreamRegistry{states: map[string]*targetState{}, tlsCache: map[string]*upstreamTLS{}}
 }
 
 func (r *upstreamRegistry) get(apiID string, t store.UpstreamTarget, u *url.URL, weight int) *targetState {
@@ -122,11 +123,14 @@ type upstreamPool struct {
 	apiID   string
 	targets []*targetState
 	policy  store.TrafficPolicy
-	mu      sync.Mutex
+	// tls belongs to the revision's route, not to the shared target state,
+	// so a canary that changes upstream TLS affects only the canary cohort.
+	tls *upstreamTLS
+	mu  sync.Mutex
 }
 
 func newUpstreamPool(a store.API, reg *upstreamRegistry) (*upstreamPool, error) {
-	p := &upstreamPool{apiID: a.ID, policy: a.TrafficPolicy}
+	p := &upstreamPool{apiID: a.ID, policy: a.TrafficPolicy, tls: reg.upstreamTLSFor(a.TrafficPolicy.UpstreamTLS)}
 	for _, t := range a.EffectiveTargets() {
 		u, err := url.Parse(t.URL)
 		if err != nil || u.Scheme == "" || u.Host == "" {
@@ -413,6 +417,10 @@ func (g *Gateway) probeDue(ctx context.Context, client *http.Client, now time.Ti
 			if hc == nil {
 				continue
 			}
+			if u := r.Pool.tls; u != nil && u.err != nil {
+				continue // requests are refused anyway; a probe would only mark targets down for other revisions
+			}
+			pc := g.probeClient(client, r.Pool.tls)
 			for _, t := range r.Pool.targets {
 				if seen[t] {
 					continue
@@ -426,7 +434,7 @@ func (g *Gateway) probeDue(ctx context.Context, client *http.Client, now time.Ti
 					continue
 				}
 				t.lastProbeNanos.Store(now.UnixNano())
-				go probeTarget(ctx, client, t, *hc)
+				go probeTarget(ctx, pc, t, *hc)
 			}
 		}
 	}

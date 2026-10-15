@@ -47,68 +47,39 @@ func generateTestCertificate(t *testing.T, dnsNames ...string) *tls.Certificate 
 	return cert
 }
 
-type mockDynamicProvider struct {
-	cert *tls.Certificate
-}
-
-func (m *mockDynamicProvider) FetchCertificate(domain, tenantSlug string) (*tls.Certificate, error) {
-	if domain == "on-demand.tenant.com" {
-		return m.cert, nil
-	}
-	return nil, ErrNoMatchingCertificate
-}
-
 func TestDynamicCertManager(t *testing.T) {
 	defaultCert := generateTestCertificate(t, "api.default.example.com")
-	acmeCert := generateTestCertificate(t, "acme.tenant.example.com")
+	exactCert := generateTestCertificate(t, "acme.tenant.example.com")
 	wildcardCert := generateTestCertificate(t, "*.partner.example.com")
-	onDemandCert := generateTestCertificate(t, "on-demand.tenant.com")
 
-	provider := &mockDynamicProvider{cert: onDemandCert}
-	mgr := NewDynamicCertManager(defaultCert, provider)
+	mgr := NewDynamicCertManager(defaultCert)
+	mgr.RegisterCertificate("acme.tenant.example.com", exactCert)
+	mgr.RegisterCertificate("*.partner.example.com", wildcardCert)
 
-	mgr.RegisterCertificate("acme.tenant.example.com", "acme-tenant", acmeCert)
-	mgr.RegisterCertificate("*.partner.example.com", "partner-tenant", wildcardCert)
-
-	// 1. Exact match
-	cert, err := mgr.GetCertificate(&tls.ClientHelloInfo{ServerName: "acme.tenant.example.com"})
-	if err != nil || cert != acmeCert {
-		t.Fatalf("expected acmeCert, got %v (err: %v)", cert, err)
+	for _, tc := range []struct {
+		sni  string
+		want *tls.Certificate
+	}{
+		{"acme.tenant.example.com", exactCert},
+		{"ACME.TENANT.EXAMPLE.COM.", exactCert}, // case and trailing dot
+		{"sub.partner.example.com", wildcardCert},
+		{"deep.sub.partner.example.com", defaultCert}, // a wildcard covers one label only
+		{"unknown.domain.com", defaultCert},
+		{"", defaultCert},
+	} {
+		got, err := mgr.GetCertificate(&tls.ClientHelloInfo{ServerName: tc.sni})
+		if err != nil || got != tc.want {
+			t.Errorf("SNI %q: got %v (err %v)", tc.sni, got, err)
+		}
 	}
 
-	// 2. Case-insensitive exact match
-	certUpper, err := mgr.GetCertificate(&tls.ClientHelloInfo{ServerName: "ACME.TENANT.EXAMPLE.COM"})
-	if err != nil || certUpper != acmeCert {
-		t.Fatalf("expected acmeCert for uppercase ServerName, got %v (err: %v)", certUpper, err)
+	mgr.UnregisterDomain("acme.tenant.example.com")
+	if got, _ := mgr.GetCertificate(&tls.ClientHelloInfo{ServerName: "acme.tenant.example.com"}); got != defaultCert {
+		t.Fatal("unregistered domain still served")
 	}
-
-	// 3. Wildcard match
-	wCert, err := mgr.GetCertificate(&tls.ClientHelloInfo{ServerName: "sub.partner.example.com"})
-	if err != nil || wCert != wildcardCert {
-		t.Fatalf("expected wildcardCert, got %v (err: %v)", wCert, err)
-	}
-
-	// 4. On-demand dynamic resolution via provider
-	odCert, err := mgr.GetCertificate(&tls.ClientHelloInfo{ServerName: "on-demand.tenant.com"})
-	if err != nil || odCert != onDemandCert {
-		t.Fatalf("expected onDemandCert, got %v (err: %v)", odCert, err)
-	}
-
-	// 5. Fallback to default certificate
-	fbCert, err := mgr.GetCertificate(&tls.ClientHelloInfo{ServerName: "unknown.domain.com"})
-	if err != nil || fbCert != defaultCert {
-		t.Fatalf("expected defaultCert fallback, got %v (err: %v)", fbCert, err)
-	}
-
-	// 6. Tenant domain resolution
-	tenant, ok := mgr.GetTenantForDomain("acme.tenant.example.com")
-	if !ok || tenant != "acme-tenant" {
-		t.Fatalf("expected tenant 'acme-tenant', got %q (found: %v)", tenant, ok)
-	}
-
-	wTenant, wOk := mgr.GetTenantForDomain("deep.partner.example.com")
-	if !wOk || wTenant != "partner-tenant" {
-		t.Fatalf("expected tenant 'partner-tenant' via wildcard, got %q (found: %v)", wTenant, wOk)
+	none := NewDynamicCertManager(nil)
+	if _, err := none.GetCertificate(&tls.ClientHelloInfo{ServerName: "x.example.com"}); err == nil {
+		t.Fatal("a manager without certificates must fail the handshake")
 	}
 }
 
@@ -117,14 +88,14 @@ func TestMTLSClientCAAndExtraction(t *testing.T) {
 	caCert := generateTestCertificate(t, "ca.example.com")
 
 	caPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caCert.Certificate[0]})
-	mgr := NewDynamicCertManager(clientCert, nil)
+	mgr := NewDynamicCertManager(clientCert)
 
 	if err := mgr.SetClientCAs(caPEM); err != nil {
 		t.Fatalf("SetClientCAs failed: %v", err)
 	}
 	mgr.SetClientAuth(tls.RequireAndVerifyClientCert)
 
-	tlsCfg := mgr.TLSConfig()
+	tlsCfg, _ := mgr.TLSConfig().GetConfigForClient(&tls.ClientHelloInfo{ServerName: "api.example.com"})
 	if tlsCfg.ClientAuth != tls.RequireAndVerifyClientCert {
 		t.Fatalf("expected ClientAuth RequireAndVerifyClientCert, got %v", tlsCfg.ClientAuth)
 	}

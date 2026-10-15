@@ -4,10 +4,13 @@ package config
 import (
 	"bufio"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -61,6 +64,21 @@ type Config struct {
 	TLSClientCAFile   string // RELAYOPS_TLS_CLIENT_CA_FILE - CA that gateway client certificates (mtls APIs) must chain to
 	TLSClientAuth     string // RELAYOPS_TLS_CLIENT_AUTH - optional (default with a client CA) or require
 	TrustedProxyCIDRs string // RELAYOPS_TRUSTED_PROXY_CIDRS - reverse proxies whose forwarded client-certificate headers are accepted
+	TLSClientCRLFile  string // RELAYOPS_TLS_CLIENT_CRL_FILE - revocation lists (PEM or DER) client certificates are checked against
+
+	// TLSReloadInterval is how often certificate, key, CA and CRL files are
+	// re-read (RELAYOPS_TLS_RELOAD_SECONDS, default 30; 0 disables polling,
+	// SIGHUP still reloads).
+	TLSReloadInterval time.Duration
+
+	// ACME certificate issuance for the gateway listener (see docs/CERTIFICATE_MANAGEMENT.md).
+	ACMEDomains      []string // RELAYOPS_ACME_DOMAINS - comma-separated hostnames; the only names certificates are requested for
+	ACMEEmail        string   // RELAYOPS_ACME_EMAIL - account contact
+	ACMEAcceptTOS    bool     // RELAYOPS_ACME_ACCEPT_TOS - the operator accepts the CA's terms of service
+	ACMEDirectoryURL string   // RELAYOPS_ACME_DIRECTORY_URL - default Let's Encrypt production
+	ACMECacheDir     string   // RELAYOPS_ACME_CACHE_DIR - default <data dir>/acme
+	ACMECacheKey     string   // RELAYOPS_ACME_CACHE_KEY - base64 32-byte key: share the cache through Postgres, encrypted
+	ACMEHTTPAddr     string   // RELAYOPS_ACME_HTTP_ADDR - optional HTTP-01 listener such as :80
 
 	AlertWebhookURL string // RELAYOPS_ALERT_WEBHOOK_URL - POST alerts (e.g. MCP definitions held for review) to this webhook (Slack/Teams compatible)
 
@@ -119,8 +137,30 @@ func (c Config) Validate() error {
 	if c.TLSClientAuth != "" && c.TLSClientAuth != "optional" && c.TLSClientAuth != "require" {
 		return fmt.Errorf("RELAYOPS_TLS_CLIENT_AUTH must be optional or require, got %q", c.TLSClientAuth)
 	}
-	if c.TLSClientCAFile != "" && c.TLSCertFile == "" && c.TLSCertsDir == "" {
-		return errors.New("RELAYOPS_TLS_CLIENT_CA_FILE needs a gateway TLS certificate (RELAYOPS_TLS_CERT_FILE or RELAYOPS_TLS_CERTS_DIR)")
+	if c.TLSClientCAFile != "" && c.TLSCertFile == "" && c.TLSCertsDir == "" && len(c.ACMEDomains) == 0 {
+		return errors.New("RELAYOPS_TLS_CLIENT_CA_FILE needs a gateway TLS certificate (RELAYOPS_TLS_CERT_FILE, RELAYOPS_TLS_CERTS_DIR or RELAYOPS_ACME_DOMAINS)")
+	}
+	if (c.TLSCertFile == "") != (c.TLSKeyFile == "") {
+		return errors.New("RELAYOPS_TLS_CERT_FILE and RELAYOPS_TLS_KEY_FILE must be set together")
+	}
+	if c.TLSClientCRLFile != "" && c.TLSClientCAFile == "" && c.TLSCertsDir == "" {
+		return errors.New("RELAYOPS_TLS_CLIENT_CRL_FILE needs client CAs (RELAYOPS_TLS_CLIENT_CA_FILE or <host>.client-ca.pem in RELAYOPS_TLS_CERTS_DIR)")
+	}
+	if c.TLSReloadInterval < 0 {
+		return errors.New("RELAYOPS_TLS_RELOAD_SECONDS must be 0 (no polling) or more")
+	}
+	if len(c.ACMEDomains) > 0 {
+		if c.Role == RoleControlPlane || c.Role == RoleRelay {
+			return fmt.Errorf("RELAYOPS_ACME_DOMAINS issues gateway certificates; RELAYOPS_ROLE=%s serves no gateway listener", c.Role)
+		}
+		if !c.ACMEAcceptTOS {
+			return errors.New("RELAYOPS_ACME_DOMAINS needs RELAYOPS_ACME_ACCEPT_TOS=true: accepting the certificate authority's terms of service is the operator's decision")
+		}
+	}
+	if c.ACMECacheKey != "" {
+		if _, err := c.ACMECacheKeyBytes(); err != nil {
+			return err
+		}
 	}
 	if c.LogSampleRate < 0 || c.LogSampleRate > 1 { // 0: unset, keep everything
 		return fmt.Errorf("RELAYOPS_LOG_SAMPLE_RATE must be greater than 0 and at most 1, got %v", c.LogSampleRate)
@@ -201,6 +241,15 @@ func Load() Config {
 		TLSClientCAFile:      env("RELAYOPS_TLS_CLIENT_CA_FILE", ""),
 		TLSClientAuth:        strings.ToLower(env("RELAYOPS_TLS_CLIENT_AUTH", "optional")),
 		TrustedProxyCIDRs:    env("RELAYOPS_TRUSTED_PROXY_CIDRS", ""),
+		TLSClientCRLFile:     env("RELAYOPS_TLS_CLIENT_CRL_FILE", ""),
+		TLSReloadInterval:    time.Duration(envInt("RELAYOPS_TLS_RELOAD_SECONDS", 30)) * time.Second,
+		ACMEDomains:          splitList(env("RELAYOPS_ACME_DOMAINS", "")),
+		ACMEEmail:            strings.TrimSpace(env("RELAYOPS_ACME_EMAIL", "")),
+		ACMEAcceptTOS:        envBool("RELAYOPS_ACME_ACCEPT_TOS", false),
+		ACMEDirectoryURL:     strings.TrimSpace(env("RELAYOPS_ACME_DIRECTORY_URL", "")),
+		ACMECacheDir:         strings.TrimSpace(env("RELAYOPS_ACME_CACHE_DIR", "")),
+		ACMECacheKey:         strings.TrimSpace(env("RELAYOPS_ACME_CACHE_KEY", "")),
+		ACMEHTTPAddr:         strings.TrimSpace(env("RELAYOPS_ACME_HTTP_ADDR", "")),
 	}
 }
 
@@ -290,4 +339,80 @@ func ResolveSecrets(text string) string {
 		}
 		return m
 	})
+}
+
+// ErrSecretNotFound means no value is configured for a secret.
+var ErrSecretNotFound = errors.New("secret is not configured")
+
+// MaxSecretFileBytes bounds a secret read from a file.
+const MaxSecretFileBytes = 1 << 20
+
+// ReadFileLimited reads a file of at most max bytes.
+func ReadFileLimited(path string, max int64) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	b, err := io.ReadAll(io.LimitReader(f, max+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(b)) > max {
+		return nil, fmt.Errorf("%s is larger than %d bytes", path, max)
+	}
+	return b, nil
+}
+
+// SecretValue returns the value of secret name, read from the file named by
+// RELAYOPS_SECRET_<NAME>_FILE (re-read on every call, so a rotated file is
+// picked up), or from RELAYOPS_SECRET_<NAME>, or from <NAME>. ResolveSecrets,
+// which runs per request for header values, reads no files. A value from an
+// environment variable may spell newlines as "\n", as some secret stores
+// require for multi-line values such as PEM. Errors never contain the value.
+func SecretValue(name string) (string, error) {
+	if path := os.Getenv("RELAYOPS_SECRET_" + name + "_FILE"); path != "" {
+		b, err := ReadFileLimited(path, MaxSecretFileBytes)
+		if err != nil {
+			return "", fmt.Errorf("secret %s: %w", name, err)
+		}
+		return string(b), nil
+	}
+	for _, key := range []string{"RELAYOPS_SECRET_" + name, name} {
+		if v, ok := os.LookupEnv(key); ok && v != "" {
+			if !strings.Contains(v, "\n") && strings.Contains(v, `\n`) {
+				v = strings.ReplaceAll(v, `\n`, "\n")
+			}
+			return v, nil
+		}
+	}
+	return "", fmt.Errorf("secret %s: %w (set RELAYOPS_SECRET_%s or RELAYOPS_SECRET_%s_FILE)", name, ErrSecretNotFound, name, name)
+}
+
+// splitList splits a comma-separated list, dropping empty entries.
+func splitList(v string) []string {
+	var out []string
+	for _, p := range strings.Split(v, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// ACMECacheKeyBytes decodes RELAYOPS_ACME_CACHE_KEY.
+func (c Config) ACMECacheKeyBytes() ([]byte, error) {
+	k, err := base64.StdEncoding.DecodeString(c.ACMECacheKey)
+	if err != nil || len(k) != 32 {
+		return nil, errors.New("RELAYOPS_ACME_CACHE_KEY must be 32 random bytes, base64-encoded (for example: openssl rand -base64 32)")
+	}
+	return k, nil
+}
+
+// ACMECacheDirectory is where ACME state is cached on disk.
+func (c Config) ACMECacheDirectory() string {
+	if c.ACMECacheDir != "" {
+		return c.ACMECacheDir
+	}
+	return filepath.Join(DataDirectory(), "acme")
 }

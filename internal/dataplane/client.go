@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/relayops/apim/internal/certs"
 	"github.com/relayops/apim/internal/store"
 )
 
@@ -104,31 +105,35 @@ type ClientConfig struct {
 
 // LoadClientTLS builds the TLS settings for calling the control plane: a CA
 // bundle to trust (instead of the system roots) and a client certificate for
-// mTLS. Empty paths are skipped; it returns nil when all are empty.
-func LoadClientTLS(caFile, certFile, keyFile string) (*tls.Config, error) {
+// mTLS. Empty paths are skipped; it returns nil when all are empty. The
+// client certificate is re-read at most every reload when its files change,
+// so a renewed certificate is presented on new connections without a restart.
+func LoadClientTLS(caFile, certFile, keyFile string, reload time.Duration) (*tls.Config, *certs.KeyPairFile, error) {
 	if caFile == "" && certFile == "" && keyFile == "" {
-		return nil, nil
+		return nil, nil, nil
 	}
 	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
 	if caFile != "" {
 		pem, err := os.ReadFile(caFile)
 		if err != nil {
-			return nil, fmt.Errorf("read control plane CA: %w", err)
+			return nil, nil, fmt.Errorf("read control plane CA: %w", err)
 		}
 		pool := x509.NewCertPool()
 		if !pool.AppendCertsFromPEM(pem) {
-			return nil, fmt.Errorf("no certificates found in %s", caFile)
+			return nil, nil, fmt.Errorf("no certificates found in %s", caFile)
 		}
 		cfg.RootCAs = pool
 	}
+	var pair *certs.KeyPairFile
 	if certFile != "" || keyFile != "" {
-		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+		var err error
+		pair, err = certs.LoadKeyPairFile(certFile, keyFile, certs.SourceDataplaneClient, reload)
 		if err != nil {
-			return nil, fmt.Errorf("load node client certificate: %w", err)
+			return nil, nil, fmt.Errorf("load node client certificate: %w", err)
 		}
-		cfg.Certificates = []tls.Certificate{cert}
+		cfg.GetClientCertificate = pair.GetClientCertificate
 	}
-	return cfg, nil
+	return cfg, pair, nil
 }
 
 // Client calls the control plane's node API.

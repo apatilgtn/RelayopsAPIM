@@ -150,7 +150,7 @@ func (s *Server) resolveTenantScope(r *http.Request, user store.AdminUser) (stor
 // are closed to tenant-scoped administrators. Revision snapshots, for example,
 // contain every tenant's configuration.
 func platformOnly(path string) bool {
-	for _, p := range []string{"/api/revisions", "/api/system/drift", "/api/admin/", "/api/upstreams/", "/api/stream"} {
+	for _, p := range []string{"/api/revisions", "/api/system/drift", "/api/system/certificates", "/api/admin/", "/api/upstreams/", "/api/stream"} {
 		if strings.HasPrefix(path, p) {
 			return true
 		}

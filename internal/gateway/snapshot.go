@@ -107,6 +107,11 @@ func buildRevisionSnapshot(apis []store.API, subs []store.SubRecord, keys map[st
 			errs = append(errs, fmt.Errorf("api %q: %v", a.Name, err))
 			continue
 		}
+		if pool.tls != nil && pool.tls.err != nil {
+			// The route stays and its requests are refused (fail closed);
+			// the reload reports why.
+			errs = append(errs, fmt.Errorf("api %q: %v", a.Name, pool.tls.err))
+		}
 		a.BasePath = normalizeBasePath(a.BasePath)
 		route := &Route{API: a, Upstream: u, Pool: pool}
 		if a.Protocol == "grpc" {

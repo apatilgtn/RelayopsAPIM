@@ -16,6 +16,7 @@ import (
 
 	"github.com/relayops/apim/internal/admin"
 	"github.com/relayops/apim/internal/analytics"
+	"github.com/relayops/apim/internal/certs"
 	"github.com/relayops/apim/internal/config"
 	"github.com/relayops/apim/internal/gateway"
 	"github.com/relayops/apim/internal/license"
@@ -255,29 +256,36 @@ func run() error {
 			}
 		}()
 	}
+	hup := newReloadSignals(bg)
 	adminSrv := &http.Server{
 		Addr:              cfg.AdminAddr,
 		Handler:           adminCore.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
-	if cfg.AdminClientCAFile != "" {
-		tlsCfg, err := clientCATLS(cfg.AdminClientCAFile)
-		if err != nil {
-			return err
-		}
-		adminSrv.TLSConfig = tlsCfg
-	}
-
-	proxySrv := newProxyServer(cfg, gw)
-	if err := configureGatewayTLS(cfg, gw, proxySrv); err != nil {
+	if adminSrv.TLSConfig, err = adminTLS(bg, "admin", cfg, gw.CertificateInventory(), hup); err != nil {
 		return err
 	}
 
-	errc := make(chan error, 2)
+	proxySrv := newProxyServer(cfg, gw)
+	var acmeIssuer *certs.ACME
 	if serveProxy {
-		go listen(proxySrv, "proxy", cfg.TLSCertFile, cfg.TLSKeyFile, errc)
+		if acmeIssuer, err = newACME(cfg, db); err != nil {
+			return err
+		}
 	}
-	go listen(adminSrv, "admin", cfg.AdminTLSCertFile, cfg.AdminTLSKeyFile, errc)
+	if err := configureGatewayTLS(bg, cfg, gw, proxySrv, acmeIssuer, hup); err != nil {
+		return err
+	}
+	if db != nil {
+		go adminCore.StartCertificateMonitor(bg, time.Hour)
+	}
+
+	errc := make(chan error, 3)
+	if serveProxy {
+		go listen(proxySrv, "proxy", errc)
+	}
+	go listen(adminSrv, "admin", errc)
+	acmeSrv := startACME(bg, cfg, acmeIssuer, errc)
 
 	slog.Info("RelayOps APIM started", "role", cfg.Role, "proxy", cfg.ProxyAddr, "proxy_served", serveProxy, "admin", cfg.AdminAddr, "node", cfg.NodeID)
 
@@ -293,6 +301,9 @@ func run() error {
 	defer cancel()
 	_ = proxySrv.Shutdown(shutCtx)
 	_ = adminSrv.Shutdown(shutCtx)
+	if acmeSrv != nil {
+		_ = acmeSrv.Shutdown(shutCtx)
+	}
 	streamMgr.StopAll()
 	cancelBG()
 	<-collectorDone // final log flush

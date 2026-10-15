@@ -5,14 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/relayops/apim/internal/config"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/relayops/apim/internal/certs"
+	"github.com/relayops/apim/internal/config"
 	"github.com/relayops/apim/internal/realtime"
 	"github.com/relayops/apim/internal/store"
 )
@@ -29,6 +31,39 @@ type Watcher struct {
 	version atomic.Int64
 	trigger chan string
 	lastAck atomic.Pointer[NodeAck] // last acknowledgement of a non-cache load
+
+	certMu     sync.Mutex
+	certDigest [32]byte  // of the certificate report last delivered
+	certSentAt time.Time // when it was delivered
+}
+
+// certReportRefresh re-sends an unchanged certificate report now and then,
+// so a control plane that lost it (restored database) gets it back.
+const certReportRefresh = 10 * time.Minute
+
+// certReportBudget keeps an acknowledgement under the 64 KiB a control plane
+// of the previous release accepts.
+const certReportBudget = 48 << 10
+
+// sendAck delivers ack with this node's certificate report attached when it
+// changed or is due for a refresh, so unchanged reports cost no database
+// writes on heartbeats.
+func (w *Watcher) sendAck(ctx context.Context, ack NodeAck) error {
+	list := certs.Budget(w.gw.certs.Reported(), certReportBudget)
+	digest := certs.Digest(list)
+	w.certMu.Lock()
+	include := digest != w.certDigest || time.Since(w.certSentAt) >= certReportRefresh
+	w.certMu.Unlock()
+	if include {
+		ack.Certificates, ack.CertificatesIncluded = list, true
+	}
+	err := w.src.Ack(ctx, ack)
+	if err == nil && include {
+		w.certMu.Lock()
+		w.certDigest, w.certSentAt = digest, time.Now()
+		w.certMu.Unlock()
+	}
+	return err
 }
 
 // HeartbeatInterval is how often a node re-acknowledges its applied
@@ -177,7 +212,7 @@ func (w *Watcher) Reload(ctx context.Context, reason string) error {
 		ack := NodeAck{NodeID: w.gw.NodeID(), Revision: ev.Version, CanaryRevision: ev.CanaryRevision, Routes: ev.Routes,
 			Keys: ev.Keys, TookMS: ev.TookMS, NodeGroup: w.gw.NodeGroup(), IsCanary: w.gw.IsCanary()}
 		w.lastAck.Store(&ack)
-		if err := w.src.Ack(ctx, ack); err != nil {
+		if err := w.sendAck(ctx, ack); err != nil {
 			slog.Warn("config acknowledgement failed", "version", ack.Revision, "err", err)
 		}
 	}
@@ -221,7 +256,7 @@ func (w *Watcher) heartbeat(ctx context.Context) {
 	}
 	hctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	if err := w.src.Ack(hctx, *ack); err != nil {
+	if err := w.sendAck(hctx, *ack); err != nil {
 		slog.Debug("heartbeat failed", "err", err)
 	}
 }
