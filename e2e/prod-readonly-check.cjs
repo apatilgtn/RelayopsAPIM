@@ -20,6 +20,7 @@ const { chromium } = require('@playwright/test');
     const title = visible ? (await h1.textContent()).trim() : '(no heading)';
     console.log(`${view}: ${visible ? 'visible' : 'NOT VISIBLE'} - ${title}`);
     if (view === 'release') await page.screenshot({ path: '../test-results/prod-release-workspace.png' });
+    if (view === 'fleet') await page.screenshot({ path: '../test-results/prod-fleet.png', fullPage: true });
   }
   await page.goto(base + '/portal/');
   await page.waitForTimeout(2500);

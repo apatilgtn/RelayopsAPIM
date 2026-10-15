@@ -45,6 +45,10 @@ const certReportRefresh = 10 * time.Minute
 // of the previous release accepts.
 const certReportBudget = 48 << 10
 
+// ErrCertificatesNotRecorded is returned by SnapshotSource.Ack when the
+// acknowledgement was recorded but the attached certificate report was not.
+var ErrCertificatesNotRecorded = errors.New("certificate report not recorded")
+
 // sendAck delivers ack with this node's certificate report attached when it
 // changed or is due for a refresh, so unchanged reports cost no database
 // writes on heartbeats.
@@ -58,6 +62,11 @@ func (w *Watcher) sendAck(ctx context.Context, ack NodeAck) error {
 		ack.Certificates, ack.CertificatesIncluded = list, true
 	}
 	err := w.src.Ack(ctx, ack)
+	if errors.Is(err, ErrCertificatesNotRecorded) {
+		// Acknowledged; the report goes again with the next heartbeat.
+		slog.Warn("certificate report not recorded; retrying with the next heartbeat", "err", err)
+		return nil
+	}
 	if err == nil && include {
 		w.certMu.Lock()
 		w.certDigest, w.certSentAt = digest, time.Now()

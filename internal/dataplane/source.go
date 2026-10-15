@@ -115,14 +115,24 @@ func (s *RemoteSource) Load(ctx context.Context, _ string, _ bool) (store.Snapsh
 }
 
 func (s *RemoteSource) Ack(ctx context.Context, ack gateway.NodeAck) error {
-	err := s.c.postJSON(ctx, PathAck, ack, nil, false)
+	h, err := s.c.post(ctx, PathAck, ack, nil, false)
 	if err != nil {
 		s.syncErrors.Add(1)
 		return err
 	}
 	s.lastSync.Store(time.Now().Unix())
+	if ack.CertificatesIncluded && h.Get(HeaderCertificates) == CertificatesNotRecorded {
+		return gateway.ErrCertificatesNotRecorded
+	}
 	return nil
 }
+
+// HeaderCertificates on an acknowledgement response reports that the
+// control plane recorded the acknowledgement but not its certificate report.
+const (
+	HeaderCertificates      = "X-RelayOps-Certificates"
+	CertificatesNotRecorded = "not-recorded"
+)
 
 // Watch long-polls for configuration changes until a request fails or a
 // configuration fails verification.

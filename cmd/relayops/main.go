@@ -310,6 +310,12 @@ func run() error {
 	if e := collector.LogExporter(); e != nil {
 		e.Shutdown(shutCtx) // after the collector's final flush
 	}
+	if db != nil && cfg.Role != config.RoleControlPlane {
+		// Heartbeats stopped with cancelBG, so the node stays out of fleet status.
+		if err := db.ForgetNode(shutCtx, cfg.NodeID); err != nil {
+			slog.Warn("could not remove this node from fleet status", "err", err)
+		}
+	}
 	tracer.Shutdown(shutCtx)
 	return nil
 }

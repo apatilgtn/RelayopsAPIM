@@ -326,3 +326,46 @@ func mustDirCache(t *testing.T) autocert.Cache {
 	}
 	return c
 }
+
+// Requiring client certificates applies only where a client CA applies: with
+// a CA for one hostname and no listener-wide CA, other hostnames must still
+// accept clients without a certificate.
+func TestRequireClientCertificatesOnlyWhereACAApplies(t *testing.T) {
+	serverCA := certtest.NewCA(t, "Server CA")
+	partnerCA := certtest.NewCA(t, "Partner clients")
+	dir := t.TempDir()
+	srv := serverCA.Issue(t, "gw", certtest.Options{DNSNames: []string{"partner.example.com", "open.example.com"}})
+	for _, h := range []string{"partner.example.com", "open.example.com"} {
+		writeFile(t, filepath.Join(dir, h+".crt"), srv.CertPEM)
+		writeFile(t, filepath.Join(dir, h+".key"), srv.KeyPEM)
+	}
+	writeFile(t, filepath.Join(dir, "partner.example.com.client-ca.pem"), partnerCA.PEM)
+
+	m := NewDynamicCertManager(nil)
+	m.SetInventory(certs.NewInventory())
+	m.RequireClientCertificates(true)
+	if err := m.LoadFiles(TLSFiles{Dir: dir}); err != nil {
+		t.Fatal(err)
+	}
+	addr := tlsServer(t, m.TLSConfig())
+	roots := certs.Pool([]*x509.Certificate{serverCA.Cert})
+	partnerClient := partnerCA.Issue(t, "partner-client", certtest.Options{Client: true}).TLS(t)
+	for _, tc := range []struct {
+		name   string
+		sni    string
+		client *tls.Certificate
+		ok     bool
+	}{
+		{"hostname without a client CA, no certificate", "open.example.com", nil, true},
+		{"hostname with a client CA, no certificate", "partner.example.com", nil, false},
+		{"hostname with a client CA, its client", "partner.example.com", &partnerClient, true},
+	} {
+		_, err := dial(t, addr, tc.sni, roots, tc.client)
+		if (err == nil) != tc.ok {
+			t.Errorf("%s: err=%v, want ok=%v", tc.name, err, tc.ok)
+		}
+	}
+	if !m.HasHostClientCAs() || !m.HostScopedClientCA("PARTNER.example.com.") || m.HostScopedClientCA("open.example.com") {
+		t.Error("host-scoped client CA lookup is wrong")
+	}
+}

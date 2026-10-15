@@ -317,7 +317,10 @@ func (m *DynamicCertManager) finalize(s *certSet) {
 			ClientCAs:      pool,
 		}
 		if mode != tls.NoClientCert && pool == nil {
-			if mode == tls.RequireAndVerifyClientCert || mode == tls.RequireAnyClientCert {
+			// RequireClientCertificates applies only where a client CA does:
+			// a hostname without one asks for no certificate. An explicit
+			// SetClientAuth mode still refuses what nothing can verify.
+			if m.clientAuthSet && (mode == tls.RequireAndVerifyClientCert || mode == tls.RequireAnyClientCert) {
 				c.ClientCAs = x509.NewCertPool() // nothing can verify: refuse rather than accept unverified
 			} else {
 				c.ClientAuth = tls.NoClientCert
@@ -402,6 +405,26 @@ func (m *DynamicCertManager) TLSConfig() *tls.Config {
 		return cur.base, nil
 	}
 	return cfg
+}
+
+// HasHostClientCAs reports whether any hostname has its own client CA.
+func (m *DynamicCertManager) HasHostClientCAs() bool {
+	return len(m.set.Load().hostCAs) > 0
+}
+
+// HostScopedClientCA reports whether a handshake for serverName verified the
+// client against that hostname's own CA rather than the listener-wide one.
+func (m *DynamicCertManager) HostScopedClientCA(serverName string) bool {
+	s := m.set.Load()
+	name := normalizeSNI(serverName)
+	if _, ok := s.hostCAs[name]; ok {
+		return true
+	}
+	if w := wildcardOf(name); w != "" {
+		_, ok := s.hostCAs[w]
+		return ok
+	}
+	return false
 }
 
 // Statuses lists the certificates this listener serves and trusts.

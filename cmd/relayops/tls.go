@@ -21,20 +21,27 @@ import (
 
 // reloadSignals fans SIGHUP out to every certificate watcher, so an operator
 // (or cert-manager's post-renewal hook) can reload certificates at once.
+// SIGHUP is intercepted only once a watcher subscribes: a node without
+// certificate files keeps the default behaviour (SIGHUP terminates it).
 type reloadSignals struct {
+	ctx  context.Context
+	once sync.Once
 	mu   sync.Mutex
 	subs []chan struct{}
 }
 
 func newReloadSignals(ctx context.Context) *reloadSignals {
-	r := &reloadSignals{}
+	return &reloadSignals{ctx: ctx}
+}
+
+func (r *reloadSignals) start() {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGHUP)
 	go func() {
 		defer signal.Stop(sig)
 		for {
 			select {
-			case <-ctx.Done():
+			case <-r.ctx.Done():
 				return
 			case <-sig:
 				slog.Info("SIGHUP: reloading certificates")
@@ -49,7 +56,6 @@ func newReloadSignals(ctx context.Context) *reloadSignals {
 			}
 		}
 	}()
-	return r
 }
 
 func (r *reloadSignals) subscribe() <-chan struct{} {
@@ -57,6 +63,7 @@ func (r *reloadSignals) subscribe() <-chan struct{} {
 	r.mu.Lock()
 	r.subs = append(r.subs, c)
 	r.mu.Unlock()
+	r.once.Do(r.start)
 	return c
 }
 
@@ -115,6 +122,7 @@ func configureGatewayTLS(ctx context.Context, cfg config.Config, gw *gateway.Gat
 		return err
 	}
 	srv.TLSConfig = m.TLSConfig()
+	gw.SetClientCAScope(m)
 	slog.Info("gateway TLS configured", "certificates", len(m.Statuses()), "acme", acme != nil,
 		"client_ca", cfg.TLSClientCAFile != "", "client_auth", cfg.TLSClientAuth, "crl", cfg.TLSClientCRLFile != "",
 		"reload_interval", cfg.TLSReloadInterval)

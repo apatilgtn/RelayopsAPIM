@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"sort"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -30,6 +31,12 @@ type upstreamTLS struct {
 	cfg      *tls.Config // never modified after construction
 	err      error       // set when the settings cannot be resolved
 	statuses []certs.Status
+
+	// transports belong to the configuration, not to a gateway-wide map, so a
+	// request still running on a replaced snapshot (a retry, say) reuses
+	// them instead of recreating one that no later swap would close.
+	tmu        sync.Mutex
+	transports map[int]*http.Transport // by response timeout
 }
 
 // resolveUpstreamTLS reads the secrets named by t. Secrets are read on every
@@ -118,15 +125,19 @@ func (r *upstreamRegistry) upstreamTLSFor(t *store.UpstreamTLS) *upstreamTLS {
 	return resolveUpstreamTLS(t, r.tlsCache)
 }
 
-// retainTLS drops cached configurations no loaded snapshot uses.
-func (r *upstreamRegistry) retainTLS(keep map[string]bool) {
+// retainTLS drops cached configurations no loaded snapshot uses and returns
+// them.
+func (r *upstreamRegistry) retainTLS(keep map[string]bool) []*upstreamTLS {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	for k := range r.tlsCache {
+	var dropped []*upstreamTLS
+	for k, u := range r.tlsCache {
 		if !keep[k] {
 			delete(r.tlsCache, k)
+			dropped = append(dropped, u)
 		}
 	}
+	return dropped
 }
 
 // tlsTransport returns the shared transport for an API's upstream TLS.
@@ -134,21 +145,29 @@ func (g *Gateway) tlsTransport(timeoutMS int, u *upstreamTLS) *http.Transport {
 	if u == nil || u.cfg == nil {
 		return g.transportFor(timeoutMS)
 	}
-	return g.transport(transportKey{timeoutMS: timeoutMS, tls: u.key}, u.cfg)
+	u.tmu.Lock()
+	defer u.tmu.Unlock()
+	if t, ok := u.transports[timeoutMS]; ok {
+		return t
+	}
+	if u.transports == nil {
+		u.transports = map[int]*http.Transport{}
+	}
+	t := newTransport(timeoutMS, u.cfg, false)
+	u.transports[timeoutMS] = t
+	return t
 }
 
-// pruneTransports closes transports for upstream TLS configurations no
-// loaded snapshot uses any more, such as one replaced by a rotated
-// certificate. Requests in flight keep their connections; only idle ones
-// are closed.
-func (g *Gateway) pruneTransports(keep map[string]bool) {
-	g.tmu.Lock()
-	defer g.tmu.Unlock()
-	for k, t := range g.transports {
-		if k.tls != "" && !keep[k.tls] {
+// closeIdle closes the idle connections of configurations no loaded snapshot
+// uses any more, such as one replaced by a rotated certificate. Requests in
+// flight keep their connections, which close after the idle timeout.
+func closeIdle(dropped []*upstreamTLS) {
+	for _, u := range dropped {
+		u.tmu.Lock()
+		for _, t := range u.transports {
 			t.CloseIdleConnections()
-			delete(g.transports, k)
 		}
+		u.tmu.Unlock()
 	}
 }
 

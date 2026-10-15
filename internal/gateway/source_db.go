@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/relayops/apim/internal/certs"
@@ -72,9 +73,10 @@ func (d *DBSource) Ack(ctx context.Context, a NodeAck) error {
 		return err
 	}
 	if a.CertificatesIncluded {
-		// Best effort: a failed report must never cost the node its liveness.
+		// The acknowledgement stands: a failed report must never cost the
+		// node its liveness. The watcher re-sends the report.
 		if err := d.store.RecordNodeCertificates(ctx, a.NodeID, a.Certificates); err != nil {
-			slog.Warn("certificate report not recorded", "node", a.NodeID, "err", err)
+			return fmt.Errorf("%w: %v", ErrCertificatesNotRecorded, err)
 		}
 	}
 	return nil

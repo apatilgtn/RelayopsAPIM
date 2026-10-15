@@ -29,6 +29,33 @@ type ClientCertInfo struct {
 var clientCertHeaders = []string{
 	"X-Client-Cert-Fingerprint", "X-Client-Cert-Subject", "X-Client-Cert-CN", "X-Client-Cert-Verified",
 	"X-SSL-Client-SHA256", "X-SSL-Client-CN", "X-SSL-Client-S-DN", "X-SSL-Client-Cert", "X-SSL-Client-Verify",
+	"X-Client-Cert-Scope",
+}
+
+// ClientCAScope tells the gateway which handshakes were verified by a
+// hostname's own client CA. *DynamicCertManager implements it.
+type ClientCAScope interface {
+	HasHostClientCAs() bool
+	HostScopedClientCA(serverName string) bool
+}
+
+// SetClientCAScope connects the listener's certificate manager, so requests
+// can be checked against the hostname their handshake was verified for.
+func (g *Gateway) SetClientCAScope(s ClientCAScope) { g.clientCAScope = s }
+
+// misdirected reports a request sent over a connection whose TLS server name
+// differs from its Host. With per-hostname client CAs, the handshake chose
+// the CA for the server name, so serving a different Host would apply the
+// wrong hostname's trust.
+func (g *Gateway) misdirected(r *http.Request) bool {
+	if r.TLS == nil || g.clientCAScope == nil || !g.clientCAScope.HasHostClientCAs() {
+		return false
+	}
+	host := r.Host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	return !strings.EqualFold(strings.TrimSuffix(host, "."), strings.TrimSuffix(r.TLS.ServerName, "."))
 }
 
 var canonicalClientCertHeaders = func() []string {
@@ -106,6 +133,11 @@ func (g *Gateway) bindClientCertHeaders(r *http.Request) {
 		return
 	}
 	r.Header.Set("X-Client-Cert-Fingerprint", cert.FingerprintSHA256)
+	// A hostname's own CA vouches for its certificates only on that hostname;
+	// mtls policy then accepts them by registered fingerprint, never by CN.
+	if r.TLS != nil && len(r.TLS.VerifiedChains) > 0 && g.clientCAScope != nil && g.clientCAScope.HostScopedClientCA(r.TLS.ServerName) {
+		r.Header.Set("X-Client-Cert-Scope", "host")
+	}
 	if cert.Subject != "" {
 		r.Header.Set("X-Client-Cert-Subject", cert.Subject)
 	}

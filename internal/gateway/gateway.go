@@ -66,6 +66,7 @@ type Gateway struct {
 	mcpObs         chan store.MCPObservation // definitions to report for review (nil: not reporting)
 	apq            sync.Map                  // GraphQL API id -> *graphql.PersistedCache
 	trustedProxies []*net.IPNet              // proxies whose forwarded client-certificate headers are accepted
+	clientCAScope  ClientCAScope             // per-hostname client CAs of the TLS listener, if any
 
 	tmu        sync.Mutex
 	transports map[transportKey]*http.Transport
@@ -253,8 +254,7 @@ func (g *Gateway) swap(s *Snapshot) {
 		}
 	}
 	g.upstreams.retain(keep)
-	g.upstreams.retainTLS(keepTLS)
-	g.pruneTransports(keepTLS)
+	closeIdle(g.upstreams.retainTLS(keepTLS))
 }
 
 // ---------------------------------------------------------------------------
@@ -713,6 +713,12 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// --- Unified Policy Pipeline Evaluation ---
+	if g.misdirected(r) {
+		st.decisionPolicy = "authentication"
+		st.decisionReason = "misdirected_request"
+		g.reject(rec, st, http.StatusMisdirectedRequest, "misdirected_request", "the Host header must match the TLS server name on this listener")
+		return
+	}
 	g.bindClientCertHeaders(r)
 
 	pReq := policy.Request{
@@ -1186,27 +1192,31 @@ func targetURL(target, in *url.URL, rawQuery string) *url.URL {
 // transportKey selects a shared upstream transport.
 type transportKey struct {
 	timeoutMS int
-	h2c       bool   // cleartext HTTP/2 with prior knowledge (gRPC over plain TCP)
-	tls       string // upstream TLS configuration digest ("" for the system roots)
+	h2c       bool // cleartext HTTP/2 with prior knowledge (gRPC over plain TCP)
 }
 
 func (g *Gateway) transportFor(timeoutMS int) *http.Transport {
-	return g.transport(transportKey{timeoutMS: timeoutMS}, nil)
+	return g.transport(transportKey{timeoutMS: timeoutMS})
 }
 
 func (g *Gateway) h2cTransportFor(timeoutMS int) *http.Transport {
-	return g.transport(transportKey{timeoutMS: timeoutMS, h2c: true}, nil)
+	return g.transport(transportKey{timeoutMS: timeoutMS, h2c: true})
 }
 
-// transport returns the shared transport for key, creating it with tlsCfg
-// (which must match key.tls) on first use.
-func (g *Gateway) transport(key transportKey, tlsCfg *tls.Config) *http.Transport {
-	timeoutMS := key.timeoutMS
+// transport returns the shared system-roots transport for key.
+func (g *Gateway) transport(key transportKey) *http.Transport {
 	g.tmu.Lock()
 	defer g.tmu.Unlock()
 	if t, ok := g.transports[key]; ok {
 		return t
 	}
+	t := newTransport(key.timeoutMS, nil, key.h2c)
+	g.transports[key] = t
+	return t
+}
+
+// newTransport builds an upstream transport; tlsCfg nil means the system roots.
+func newTransport(timeoutMS int, tlsCfg *tls.Config, h2c bool) *http.Transport {
 	t := &http.Transport{
 		DialContext:           (&net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
 		ForceAttemptHTTP2:     true,
@@ -1220,12 +1230,11 @@ func (g *Gateway) transport(key transportKey, tlsCfg *tls.Config) *http.Transpor
 	if tlsCfg != nil {
 		t.TLSClientConfig = tlsCfg.Clone()
 	}
-	if key.h2c {
+	if h2c {
 		p := new(http.Protocols)
 		p.SetUnencryptedHTTP2(true)
 		t.Protocols = p
 	}
-	g.transports[key] = t
 	return t
 }
 

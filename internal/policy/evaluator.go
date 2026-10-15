@@ -331,7 +331,11 @@ func (e *Evaluator) Evaluate(ctx context.Context, req Request, api *store.API, s
 		if !ok {
 			allowed := false
 			if api.RequestHeaders != nil {
-				if allowedCN, exists := api.RequestHeaders["Allowed-Client-CN"]; exists && allowedCN != "" {
+				// A certificate verified by a hostname's own CA is accepted only
+				// by its registered or allowed fingerprint: that CA's owner can
+				// issue any common name, including one another tenant allows.
+				hostScoped := req.Header.Get("X-Client-Cert-Scope") == "host"
+				if allowedCN, exists := api.RequestHeaders["Allowed-Client-CN"]; exists && allowedCN != "" && !hostScoped {
 					if allowedCN == "*" || strings.EqualFold(allowedCN, cn) {
 						allowed = true
 					}

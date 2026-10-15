@@ -16,7 +16,8 @@
   const fmtMs = (n) => (n == null ? '–' : n < 10 ? n.toFixed(2) + ' ms' : n < 1000 ? n.toFixed(0) + ' ms' : (n / 1000).toFixed(2) + ' s');
   const fmtBytes = (b) => { b = b || 0; const u = ['B', 'KB', 'MB', 'GB']; let i = 0; while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; } return b.toFixed(i ? 1 : 0) + ' ' + u[i]; };
   const fmtTime = (t) => new Date(t).toLocaleTimeString([], { hour12: false });
-  const fmtDate = (t) => new Date(t).toLocaleString([], { hour12: false });
+  // Day-first with a named month (15 Oct 2026, 14:03:22): unambiguous in every locale.
+  const fmtDate = (t) => new Date(t).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
   const fmtUptime = (s) => { const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60); return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m ${s % 60}s`; };
 
   const statusPill = (s) => {
@@ -296,6 +297,8 @@
       $('#conn-text').textContent = 'Live SSE';
       const d = JSON.parse(e.data);
       $('#node-info').textContent = 'Node: ' + d.node;
+      // Config events arrive only on change; seed the chip on whichever view the console opened.
+      if (live.configVersion === null) api('GET', '/api/overview').then((ov) => ov?.gateway && setConfigVersion(ov.gateway.config_version)).catch(() => {});
     });
     es.addEventListener('tick', (e) => {
       const t = JSON.parse(e.data);
@@ -1628,6 +1631,8 @@
     const left = (c) => {
       const days = Math.floor((new Date(c.not_after).getTime() - Date.now()) / 86400000);
       if (days < 0) return '<span class="tag error">Expired</span>';
+      // Clients refuse a certificate before its start date as firmly as after expiry.
+      if (c.not_before && new Date(c.not_before).getTime() > Date.now()) return `<span class="tag error" title="Valid from ${esc(fmtDate(c.not_before))}">Not yet valid</span>`;
       const tag = c.severity === 'critical' ? 'error' : c.severity === 'warning' ? 'warn' : c.severity === 'info' ? 'blue' : 'success';
       return `<span class="tag ${tag}">${days} days</span>`;
     };

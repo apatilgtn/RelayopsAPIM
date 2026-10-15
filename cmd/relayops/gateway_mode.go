@@ -184,7 +184,11 @@ func runRelay(ctx context.Context, cfg config.Config) error {
 		return err
 	}
 	srv := &http.Server{Addr: cfg.AdminAddr, Handler: relay.Handler(), ReadHeaderTimeout: 10 * time.Second}
-	if srv.TLSConfig, err = adminTLS(ctx, "relay", cfg, nil, hup); err != nil {
+	// The relay authenticates gateways by node token, as before; the admin
+	// client CA is for the admin listener and is not applied here.
+	relayCfg := cfg
+	relayCfg.AdminClientCAFile = ""
+	if srv.TLSConfig, err = adminTLS(ctx, "relay", relayCfg, nil, hup); err != nil {
 		return err
 	}
 	errc := make(chan error, 1)

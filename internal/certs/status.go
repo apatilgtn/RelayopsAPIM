@@ -256,10 +256,11 @@ func (inv *Inventory) WriteMetrics(w io.Writer) {
 	}
 }
 
+var labelEscaper = strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`)
+
 // label quotes a Prometheus label value.
 func label(v string) string {
-	r := strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`)
-	return `"` + r.Replace(v) + `"`
+	return `"` + labelEscaper.Replace(v) + `"`
 }
 
 // Expiry thresholds for warnings.

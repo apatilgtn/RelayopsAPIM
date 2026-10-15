@@ -309,3 +309,34 @@ func TestBudgetKeepsReportsSmall(t *testing.T) {
 		t.Fatal("digest does not tell reports apart")
 	}
 }
+
+// A certificate already in the shared cache is served without consulting the
+// order lock: before, the lock ran on every handshake, so a second node that
+// did not hold it refused hostnames whose certificate it could have served.
+func TestACMECachedCertificateNeedsNoOrderLock(t *testing.T) {
+	dir := t.TempDir()
+	cache := autocert.DirCache(dir)
+	leaf := certtest.NewCA(t, "Issuer").Issue(t, "api.example.com", certtest.Options{DNSNames: []string{"api.example.com"}, Validity: 60 * 24 * time.Hour})
+	if err := cache.Put(context.Background(), "api.example.com", append(append([]byte{}, leaf.KeyPEM...), leaf.CertPEM...)); err != nil {
+		t.Fatal(err)
+	}
+	locks := 0
+	a, err := certs.NewACME(certs.ACMEConfig{
+		Domains: []string{"api.example.com"}, AcceptTOS: true, Cache: cache,
+		DirectoryURL: "https://acme.invalid/directory", // never reached: the cache serves it
+		OrderLock:    func(context.Context, string) (bool, error) { locks++; return false, nil },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hello := &tls.ClientHelloInfo{ServerName: "api.example.com", CipherSuites: []uint16{tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256}}
+	for i := 0; i < 3; i++ {
+		c, err := a.GetCertificate(hello)
+		if err != nil || certs.Leaf(c) == nil || certs.Leaf(c).SerialNumber.Cmp(leaf.Cert.SerialNumber) != 0 {
+			t.Fatalf("handshake %d: cached certificate not served: %v", i, err)
+		}
+	}
+	if locks != 0 {
+		t.Fatalf("order lock consulted %d times for a cached certificate", locks)
+	}
+}

@@ -380,9 +380,11 @@ func (s *Server) dpAck(w http.ResponseWriter, r *http.Request) {
 	err := s.store.AcknowledgeRevisionWithCanary(r.Context(), ack.NodeID, ack.Revision, ack.CanaryRevision,
 		ack.Routes, ack.Keys, ack.TookMS, ack.NodeGroup, ack.IsCanary)
 	if err == nil && ack.CertificatesIncluded {
-		// Best effort: a failed report must never cost the node its liveness.
+		// The acknowledgement stands: a failed report must never cost the
+		// node its liveness. The header tells the node to send it again.
 		if cerr := s.store.RecordNodeCertificates(r.Context(), ack.NodeID, ack.Certificates); cerr != nil {
 			slog.Warn("certificate report not recorded", "node", ack.NodeID, "err", cerr)
+			w.Header().Set(dataplane.HeaderCertificates, dataplane.CertificatesNotRecorded)
 		}
 	}
 	s.noContent(w, err)

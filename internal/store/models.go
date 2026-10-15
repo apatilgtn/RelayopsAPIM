@@ -1572,6 +1572,14 @@ func (s *Store) AcknowledgeRevision(ctx context.Context, nodeID string, revision
 	return s.AcknowledgeRevisionWithGroup(ctx, nodeID, revision, routes, keys, tookMS, "default", false)
 }
 
+// ForgetNode removes a node's acknowledgements, so a node that shuts down
+// cleanly (such as a deploy's temporary standby) leaves fleet status at once
+// instead of lingering for the liveness window.
+func (s *Store) ForgetNode(ctx context.Context, nodeID string) error {
+	_, err := s.Pool.Exec(ctx, `DELETE FROM node_acknowledgements WHERE node_id = $1`, nodeID)
+	return err
+}
+
 // NodeLivenessWindow is how recently a node must have acknowledged to count
 // in fleet status. Nodes re-acknowledge every 30s (gateway.HeartbeatInterval),
 // so this tolerates three missed heartbeats; a stopped or replaced node drops

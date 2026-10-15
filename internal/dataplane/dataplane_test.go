@@ -265,3 +265,23 @@ func TestLogWriterSendsGzipBatch(t *testing.T) {
 }
 
 func gzipReader(r *http.Request) (io.Reader, error) { return gzip.NewReader(r.Body) }
+
+// A control plane that recorded the acknowledgement but not its certificate
+// report says so, and the node keeps the report pending.
+func TestAckReportsUnrecordedCertificates(t *testing.T) {
+	failReport := true
+	src := NewRemoteSource(newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if failReport {
+			w.Header().Set(HeaderCertificates, CertificatesNotRecorded)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})))
+	ack := gateway.NodeAck{NodeID: "gw-1", Revision: 3, CertificatesIncluded: true}
+	if err := src.Ack(context.Background(), ack); !errors.Is(err, gateway.ErrCertificatesNotRecorded) {
+		t.Fatalf("err = %v, want ErrCertificatesNotRecorded", err)
+	}
+	failReport = false
+	if err := src.Ack(context.Background(), ack); err != nil {
+		t.Fatalf("recorded report: %v", err)
+	}
+}

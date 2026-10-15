@@ -39,8 +39,10 @@ var ErrOrderInProgress = errors.New("another node is obtaining this certificate;
 
 // ACME issues and renews certificates for a fixed list of hostnames.
 type ACME struct {
-	m     *autocert.Manager
-	hosts map[string]bool
+	m         *autocert.Manager
+	hosts     map[string]bool
+	cache     autocert.Cache
+	orderLock func(ctx context.Context, host string) (bool, error)
 
 	mu     sync.Mutex
 	issued map[string]Status // hostname -> last certificate served
@@ -72,35 +74,19 @@ func NewACME(cfg ACMEConfig) (*ACME, error) {
 	if len(list) == 0 {
 		return nil, errors.New("RELAYOPS_ACME_DOMAINS lists no hostnames")
 	}
-	allowed := autocert.HostWhitelist(list...)
-	policy := allowed
-	if cfg.OrderLock != nil {
-		// Called only when the certificate is in neither memory nor cache,
-		// that is, right before an order.
-		policy = func(ctx context.Context, host string) error {
-			if err := allowed(ctx, host); err != nil {
-				return err
-			}
-			ok, err := cfg.OrderLock(ctx, host)
-			if err != nil {
-				return fmt.Errorf("ACME order lock: %w", err)
-			}
-			if !ok {
-				return ErrOrderInProgress
-			}
-			return nil
-		}
-	}
+	// autocert consults HostPolicy before every lookup, including cache hits
+	// and HTTP-01 validations, so it holds only the allow-list. The order
+	// lock is taken in GetCertificate, when a certificate is really missing.
 	m := &autocert.Manager{
 		Prompt:     autocert.AcceptTOS,
 		Cache:      cfg.Cache,
-		HostPolicy: policy,
+		HostPolicy: autocert.HostWhitelist(list...),
 		Email:      cfg.Email,
 	}
 	if cfg.DirectoryURL != "" {
 		m.Client = &acme.Client{DirectoryURL: cfg.DirectoryURL}
 	}
-	return &ACME{m: m, hosts: hosts, issued: map[string]Status{}}, nil
+	return &ACME{m: m, hosts: hosts, cache: cfg.Cache, orderLock: cfg.OrderLock, issued: map[string]Status{}}, nil
 }
 
 func normalizeHost(h string) (string, error) {
@@ -139,6 +125,9 @@ const ALPNProto = acme.ALPNProto
 // GetCertificate returns the certificate for hello, obtaining or renewing it
 // when needed, and answers TLS-ALPN-01 validations.
 func (a *ACME) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+	if err := a.lockBeforeOrder(hello); err != nil {
+		return nil, err
+	}
 	c, err := a.m.GetCertificate(hello)
 	if err != nil || IsChallenge(hello) {
 		return c, err
@@ -152,6 +141,44 @@ func (a *ACME) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, err
 		a.mu.Unlock()
 	}
 	return c, nil
+}
+
+// lockBeforeOrder takes the shared order lock when serving hello would make
+// autocert order a certificate: a configured hostname this node has not
+// served yet and that is not in the shared cache. Certificates already in
+// memory or in the cache need no lock, so ordinary handshakes on every node
+// cost nothing extra.
+func (a *ACME) lockBeforeOrder(hello *tls.ClientHelloInfo) error {
+	if a.orderLock == nil || hello == nil || IsChallenge(hello) {
+		return nil
+	}
+	name, err := normalizeHost(hello.ServerName)
+	if err != nil || !a.hosts[name] {
+		return nil // autocert's allow-list refuses it
+	}
+	a.mu.Lock()
+	_, served := a.issued[name]
+	a.mu.Unlock()
+	if served {
+		return nil
+	}
+	ctx := hello.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	for _, key := range []string{name, name + "+rsa"} { // autocert's cache keys
+		if _, err := a.cache.Get(ctx, key); err == nil {
+			return nil
+		}
+	}
+	ok, err := a.orderLock(ctx, name)
+	if err != nil {
+		return fmt.Errorf("ACME order lock: %w", err)
+	}
+	if !ok {
+		return ErrOrderInProgress
+	}
+	return nil
 }
 
 // HTTPHandler answers HTTP-01 validations and redirects other requests to HTTPS.

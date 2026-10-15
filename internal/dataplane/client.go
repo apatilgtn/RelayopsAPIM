@@ -210,21 +210,27 @@ func (c *Client) newRequest(ctx context.Context, method, path string, body io.Re
 // postJSON sends in as JSON (gzip-compressed when gz is set) and decodes a 2xx
 // response into out when out is non-nil.
 func (c *Client) postJSON(ctx context.Context, path string, in, out any, gz bool) error {
+	_, err := c.post(ctx, path, in, out, gz)
+	return err
+}
+
+// post is postJSON returning the response headers.
+func (c *Client) post(ctx context.Context, path string, in, out any, gz bool) (http.Header, error) {
 	var buf bytes.Buffer
 	if gz {
 		zw := gzip.NewWriter(&buf)
 		if err := json.NewEncoder(zw).Encode(in); err != nil {
-			return err
+			return nil, err
 		}
 		if err := zw.Close(); err != nil {
-			return err
+			return nil, err
 		}
 	} else if err := json.NewEncoder(&buf).Encode(in); err != nil {
-		return err
+		return nil, err
 	}
 	req, err := c.newRequest(ctx, http.MethodPost, path, &buf)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if gz {
@@ -232,17 +238,17 @@ func (c *Client) postJSON(ctx context.Context, path string, in, out any, gz bool
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
-		return statusError(resp)
+		return nil, statusError(resp)
 	}
 	if out == nil {
 		_, _ = io.Copy(io.Discard, resp.Body)
-		return nil
+		return resp.Header, nil
 	}
-	return json.NewDecoder(resp.Body).Decode(out)
+	return resp.Header, json.NewDecoder(resp.Body).Decode(out)
 }
 
 func statusError(resp *http.Response) error {

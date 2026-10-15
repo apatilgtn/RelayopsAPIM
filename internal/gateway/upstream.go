@@ -38,6 +38,7 @@ type targetState struct {
 	rawURL   string
 	name     string
 	url      *url.URL
+	tlsKey   string // upstream TLS digest; "" for the system roots
 	weight   atomic.Int64
 	headers  atomic.Pointer[map[string]string] // per-target request headers (secret references)
 	backup   atomic.Bool                       // used only when no primary target can serve
@@ -72,16 +73,22 @@ func newUpstreamRegistry() *upstreamRegistry {
 	return &upstreamRegistry{states: map[string]*targetState{}, tlsCache: map[string]*upstreamTLS{}}
 }
 
-func (r *upstreamRegistry) get(apiID string, t store.UpstreamTarget, u *url.URL, weight int) *targetState {
+// get returns the shared state for a target. Revisions with different
+// upstream TLS settings get separate states: health and circuit state
+// observed with one revision's trust say nothing about another's.
+func (r *upstreamRegistry) get(apiID string, t store.UpstreamTarget, u *url.URL, weight int, tlsKey string) *targetState {
 	key := apiID + "|" + t.URL
 	if t.Name != "" {
 		key += "|" + t.Name
+	}
+	if tlsKey != "" {
+		key += "|tls:" + tlsKey
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	ts, ok := r.states[key]
 	if !ok {
-		ts = &targetState{key: key, apiID: apiID, rawURL: t.URL, name: t.Name, url: u}
+		ts = &targetState{key: key, apiID: apiID, rawURL: t.URL, name: t.Name, url: u, tlsKey: tlsKey}
 		ts.healthy.Store(true)
 		r.states[key] = ts
 	}
@@ -131,6 +138,10 @@ type upstreamPool struct {
 
 func newUpstreamPool(a store.API, reg *upstreamRegistry) (*upstreamPool, error) {
 	p := &upstreamPool{apiID: a.ID, policy: a.TrafficPolicy, tls: reg.upstreamTLSFor(a.TrafficPolicy.UpstreamTLS)}
+	tlsKey := ""
+	if p.tls != nil && p.tls.err == nil {
+		tlsKey = p.tls.key
+	}
 	for _, t := range a.EffectiveTargets() {
 		u, err := url.Parse(t.URL)
 		if err != nil || u.Scheme == "" || u.Host == "" {
@@ -140,7 +151,7 @@ func newUpstreamPool(a store.API, reg *upstreamRegistry) (*upstreamPool, error) 
 		if w == 0 && len(a.TrafficPolicy.Targets) == 0 {
 			w = 1
 		}
-		p.targets = append(p.targets, reg.get(a.ID, t, u, w))
+		p.targets = append(p.targets, reg.get(a.ID, t, u, w, tlsKey))
 	}
 	return p, nil
 }
@@ -500,6 +511,7 @@ type TargetStatus struct {
 	APIID               string     `json:"api_id"`
 	URL                 string     `json:"url"`
 	Name                string     `json:"name,omitempty"`
+	UpstreamTLS         string     `json:"upstream_tls,omitempty"` // digest prefix of the revision's upstream TLS
 	Weight              int64      `json:"weight"`
 	Healthy             bool       `json:"healthy"`
 	Circuit             string     `json:"circuit"` // closed | open | half_open
@@ -519,7 +531,7 @@ func (g *Gateway) UpstreamStatus() []TargetStatus {
 	for _, t := range g.upstreams.snapshot() {
 		t.mu.Lock()
 		st := TargetStatus{
-			APIID: t.apiID, URL: t.rawURL, Name: t.name, Weight: t.weight.Load(), Healthy: t.healthy.Load(),
+			APIID: t.apiID, URL: t.rawURL, Name: t.name, UpstreamTLS: shortDigest(t.tlsKey), Weight: t.weight.Load(), Healthy: t.healthy.Load(),
 			ConsecutiveFailures: t.consecutiveFailures, InFlight: t.inflight.Load(),
 			Requests: t.requestsTotal.Load(), Failures: t.failuresTotal.Load(), Retries: t.retriesTotal.Load(),
 			CircuitOpens: t.breakerOpens.Load(), LastError: t.lastError,
@@ -560,10 +572,21 @@ func (g *Gateway) WriteUpstreamMetrics(w io.Writer) {
 	for _, m := range series {
 		fmt.Fprintf(w, "# HELP %s %s\n# TYPE %s %s\n", m.name, m.help, m.name, m.typ)
 		for _, s := range status {
+			if s.UpstreamTLS != "" {
+				fmt.Fprintf(w, "%s{api_id=%q,target=%q,upstream_tls=%q} %g\n", m.name, s.APIID, s.URL, s.UpstreamTLS, m.val(s))
+				continue
+			}
 			fmt.Fprintf(w, "%s{api_id=%q,target=%q} %g\n", m.name, s.APIID, s.URL, m.val(s))
 		}
 		fmt.Fprintln(w)
 	}
+}
+
+func shortDigest(d string) string {
+	if len(d) > 12 {
+		return d[:12]
+	}
+	return d
 }
 
 func b2f(b bool) float64 {
