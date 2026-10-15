@@ -36,6 +36,27 @@ type TrafficPolicy struct {
 	// response body (up to this size; larger or streamed bodies are passed
 	// through and plugins are told the body is unavailable).
 	WasmResponseBodyLimitBytes int `json:"wasm_response_body_limit_bytes,omitempty"`
+	// UpstreamTLS sets how the gateway connects to https and grpcs targets:
+	// a private CA, a client certificate for mutual TLS, the server name and
+	// the lowest TLS version. Unset, targets are verified against the
+	// system roots.
+	UpstreamTLS *UpstreamTLS `json:"upstream_tls,omitempty"`
+}
+
+// UpstreamTLS is an API's TLS settings for its upstream. Certificates and
+// keys are secret references resolved on each gateway, never stored values.
+type UpstreamTLS struct {
+	// CA is a PEM bundle the upstream's certificate must chain to. It
+	// replaces the system roots for this API.
+	CA string `json:"ca,omitempty"`
+	// ClientCertificate and ClientKey are presented for mutual TLS.
+	ClientCertificate string `json:"client_certificate,omitempty"`
+	ClientKey         string `json:"client_key,omitempty"`
+	// ServerName is sent as SNI and verified in the upstream's certificate
+	// instead of the target URL's host.
+	ServerName string `json:"server_name,omitempty"`
+	// MinVersion is "1.2" (default) or "1.3".
+	MinVersion string `json:"min_version,omitempty"`
 }
 
 // MaxWasmPlugins bounds the plugin chain per API.
@@ -56,6 +77,9 @@ var (
 	// A credential header may only carry a secret reference, optionally after
 	// an auth scheme, so a key is never stored in configuration.
 	secretHeaderValue = regexp.MustCompile(`^((Bearer|Basic|Token) )?\$\{secret:[A-Za-z][A-Za-z0-9_]*\}$`)
+	// SecretReference is a whole value that names one secret.
+	SecretReference = regexp.MustCompile(`^\$\{secret:([A-Za-z][A-Za-z0-9_]*)\}$`)
+	tlsServerName   = regexp.MustCompile(`^(?i)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$`)
 )
 
 func sensitiveTargetHeader(name string) bool {
@@ -150,6 +174,13 @@ func (p *TrafficPolicy) Normalize() {
 	}
 	if cb := p.CircuitBreaker; cb != nil && cb.OpenSeconds == 0 {
 		cb.OpenSeconds = 30
+	}
+	if t := p.UpstreamTLS; t != nil {
+		t.CA = strings.TrimSpace(t.CA)
+		t.ClientCertificate = strings.TrimSpace(t.ClientCertificate)
+		t.ClientKey = strings.TrimSpace(t.ClientKey)
+		t.ServerName = strings.ToLower(strings.TrimSpace(t.ServerName))
+		t.MinVersion = strings.TrimSpace(t.MinVersion) // "" means 1.2
 	}
 	if hc := p.HealthCheck; hc != nil {
 		if hc.IntervalSeconds == 0 {
@@ -272,6 +303,9 @@ func (p TrafficPolicy) Validate() error {
 			return errors.New("traffic_policy.circuit_breaker.open_seconds must be between 1 and 3600")
 		}
 	}
+	if err := p.UpstreamTLS.Validate(); err != nil {
+		return err
+	}
 	if hc := p.HealthCheck; hc != nil {
 		if !strings.HasPrefix(hc.Path, "/") {
 			return errors.New("traffic_policy.health_check.path must start with '/'")
@@ -285,6 +319,36 @@ func (p TrafficPolicy) Validate() error {
 		if hc.UnhealthyThreshold < 1 || hc.HealthyThreshold < 1 {
 			return errors.New("traffic_policy.health_check thresholds must be >= 1")
 		}
+	}
+	return nil
+}
+
+// Validate reports the first invalid upstream TLS setting. Call
+// TrafficPolicy.Normalize first. A nil value is valid.
+func (t *UpstreamTLS) Validate() error {
+	if t == nil {
+		return nil
+	}
+	for _, f := range []struct{ name, v string }{
+		{"ca", t.CA}, {"client_certificate", t.ClientCertificate}, {"client_key", t.ClientKey},
+	} {
+		if f.v != "" && !SecretReference.MatchString(f.v) {
+			return fmt.Errorf("traffic_policy.upstream_tls.%s must be a secret reference such as \"${secret:NAME}\", not a literal certificate or key", f.name)
+		}
+	}
+	if (t.ClientCertificate == "") != (t.ClientKey == "") {
+		return errors.New("traffic_policy.upstream_tls.client_certificate and client_key must be set together")
+	}
+	if t.ServerName != "" && (len(t.ServerName) > 253 || !tlsServerName.MatchString(t.ServerName)) {
+		return errors.New("traffic_policy.upstream_tls.server_name must be a DNS hostname")
+	}
+	switch t.MinVersion {
+	case "", "1.2", "1.3":
+	default:
+		return errors.New("traffic_policy.upstream_tls.min_version must be \"1.2\" or \"1.3\"")
+	}
+	if t.CA == "" && t.ClientCertificate == "" && t.ServerName == "" && t.MinVersion != "1.3" {
+		return errors.New("traffic_policy.upstream_tls sets nothing: give ca, client_certificate and client_key, server_name, or min_version \"1.3\"")
 	}
 	return nil
 }

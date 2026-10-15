@@ -2,16 +2,11 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
 	"path/filepath"
 	"regexp"
-	"strings"
 	"time"
 
 	"github.com/relayops/apim/internal/admin"
@@ -32,7 +27,7 @@ import (
 // configuration, acknowledgements, request logs and AI budgets exchanged with
 // the control plane's node API. It never opens a database connection.
 func runGateway(ctx context.Context, cfg config.Config) error {
-	tlsCfg, err := dataplane.LoadClientTLS(cfg.DataplaneCAFile, cfg.DataplaneClientCertFile, cfg.DataplaneClientKeyFile)
+	tlsCfg, nodeCert, err := dataplane.LoadClientTLS(cfg.DataplaneCAFile, cfg.DataplaneClientCertFile, cfg.DataplaneClientKeyFile, cfg.TLSReloadInterval)
 	if err != nil {
 		return err
 	}
@@ -63,6 +58,9 @@ func runGateway(ctx context.Context, cfg config.Config) error {
 	gw := gateway.New(collector, gateway.NewRedisLimiter(cfg.RedisURL, gateway.NewLimiter()), cfg.NodeID)
 	gw.SetNodeMetadata(cfg.NodeGroup, cfg.IsCanary)
 	gw.SetRunnerSecret(cfg.RunnerSecret)
+	if nodeCert != nil {
+		gw.CertificateInventory().Register(nodeCert.Statuses)
+	}
 	tracer := tracing.NewFromEnv("relayops-gateway", cfg.NodeID)
 	gw.SetTracer(tracer)
 	if err := loadWasm(ctx, cfg, gw); err != nil {
@@ -98,17 +96,26 @@ func runGateway(ctx context.Context, cfg config.Config) error {
 	go gw.RunHealthChecks(bg)
 
 	proxySrv := newProxyServer(cfg, gw)
-	if err := configureGatewayTLS(cfg, gw, proxySrv); err != nil {
+	acmeIssuer, err := newACME(cfg, nil)
+	if err != nil {
 		return err
+	}
+	hup := newReloadSignals(bg)
+	if err := configureGatewayTLS(bg, cfg, gw, proxySrv, acmeIssuer, hup); err != nil {
+		return err
+	}
+	if nodeCert != nil {
+		go reloadOnSignal(bg, nodeCert, hup.subscribe())
 	}
 	statusSrv := &http.Server{
 		Addr:              cfg.StatusAddr,
 		Handler:           dataplane.StatusHandler(gw, src),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
-	errc := make(chan error, 2)
-	go listen(proxySrv, "proxy", cfg.TLSCertFile, cfg.TLSKeyFile, errc)
-	go listen(statusSrv, "status", "", "", errc)
+	errc := make(chan error, 3)
+	go listen(proxySrv, "proxy", errc)
+	go listen(statusSrv, "status", errc)
+	acmeSrv := startACME(bg, cfg, acmeIssuer, errc)
 	slog.Info("RelayOps gateway node started", "role", cfg.Role, "proxy", cfg.ProxyAddr, "status", cfg.StatusAddr,
 		"control_plane", cfg.ControlPlaneURL, "node", cfg.NodeID, "group", cfg.NodeGroup, "canary", cfg.IsCanary)
 
@@ -123,6 +130,9 @@ func runGateway(ctx context.Context, cfg config.Config) error {
 	defer cancel()
 	_ = proxySrv.Shutdown(shutCtx)
 	_ = statusSrv.Shutdown(shutCtx)
+	if acmeSrv != nil {
+		_ = acmeSrv.Shutdown(shutCtx)
+	}
 	streamMgr.StopAll()
 	cancelBG()
 	<-collectorDone // final log flush (to the control plane, or the spool)
@@ -154,9 +164,13 @@ func loadWasm(ctx context.Context, cfg config.Config, gw *gateway.Gateway) error
 // RELAYOPS_CONTROL_PLANE_URL. Gateways point their RELAYOPS_CONTROL_PLANE_URL
 // at the relay.
 func runRelay(ctx context.Context, cfg config.Config) error {
-	tlsCfg, err := dataplane.LoadClientTLS(cfg.DataplaneCAFile, cfg.DataplaneClientCertFile, cfg.DataplaneClientKeyFile)
+	tlsCfg, nodeCert, err := dataplane.LoadClientTLS(cfg.DataplaneCAFile, cfg.DataplaneClientCertFile, cfg.DataplaneClientKeyFile, cfg.TLSReloadInterval)
 	if err != nil {
 		return err
+	}
+	hup := newReloadSignals(ctx)
+	if nodeCert != nil {
+		go reloadOnSignal(ctx, nodeCert, hup.subscribe())
 	}
 	client, err := dataplane.NewClient(dataplane.ClientConfig{
 		BaseURL: cfg.ControlPlaneURL, Token: cfg.DataplaneToken, NodeID: cfg.NodeID,
@@ -170,8 +184,11 @@ func runRelay(ctx context.Context, cfg config.Config) error {
 		return err
 	}
 	srv := &http.Server{Addr: cfg.AdminAddr, Handler: relay.Handler(), ReadHeaderTimeout: 10 * time.Second}
+	if srv.TLSConfig, err = adminTLS(ctx, "relay", cfg, nil, hup); err != nil {
+		return err
+	}
 	errc := make(chan error, 1)
-	go listen(srv, "relay", cfg.AdminTLSCertFile, cfg.AdminTLSKeyFile, errc)
+	go listen(srv, "relay", errc)
 	slog.Info("RelayOps relay started", "addr", cfg.AdminAddr, "control_plane", cfg.ControlPlaneURL, "node", cfg.NodeID)
 	select {
 	case <-ctx.Done():
@@ -229,21 +246,6 @@ func nodeAPIOption(cfg config.Config) admin.Option {
 	return admin.WithDataplane(o)
 }
 
-// clientCATLS makes the admin listener request client certificates and verify
-// any it receives against caFile. Browsers without one still connect; the node
-// API can then require a verified certificate.
-func clientCATLS(caFile string) (*tls.Config, error) {
-	pem, err := os.ReadFile(caFile)
-	if err != nil {
-		return nil, fmt.Errorf("read RELAYOPS_ADMIN_CLIENT_CA_FILE: %w", err)
-	}
-	pool := x509.NewCertPool()
-	if !pool.AppendCertsFromPEM(pem) {
-		return nil, fmt.Errorf("no certificates found in %s", caFile)
-	}
-	return &tls.Config{MinVersion: tls.VersionTLS12, ClientCAs: pool, ClientAuth: tls.VerifyClientCertIfGiven}, nil
-}
-
 // silentAcks drops acknowledgements, keeping a node out of fleet status.
 type silentAcks struct{ gateway.SnapshotSource }
 
@@ -286,87 +288,5 @@ func newProxyServer(cfg config.Config, gw *gateway.Gateway) *http.Server {
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       120 * time.Second,
-	}
-}
-
-// configureGatewayTLS applies trusted proxies and, when gateway certificates
-// are configured, SNI certificate selection and client-certificate checking
-// to the proxy listener.
-func configureGatewayTLS(cfg config.Config, gw *gateway.Gateway, srv *http.Server) error {
-	if cfg.TrustedProxyCIDRs != "" {
-		nets, err := gateway.ParseCIDRs(cfg.TrustedProxyCIDRs)
-		if err != nil {
-			return fmt.Errorf("RELAYOPS_TRUSTED_PROXY_CIDRS: %w", err)
-		}
-		gw.SetTrustedProxies(nets)
-	}
-	if cfg.TLSCertFile == "" && cfg.TLSCertsDir == "" {
-		return nil
-	}
-	var def *tls.Certificate
-	if cfg.TLSCertFile != "" {
-		c, err := tls.LoadX509KeyPair(cfg.TLSCertFile, cfg.TLSKeyFile)
-		if err != nil {
-			return fmt.Errorf("gateway TLS certificate: %w", err)
-		}
-		def = &c
-	}
-	m := gateway.NewDynamicCertManager(def, nil)
-	var hosts []string
-	if cfg.TLSCertsDir != "" {
-		files, _ := filepath.Glob(filepath.Join(cfg.TLSCertsDir, "*.crt"))
-		for _, crt := range files {
-			base := strings.TrimSuffix(filepath.Base(crt), ".crt")
-			certPEM, err := os.ReadFile(crt)
-			if err != nil {
-				return err
-			}
-			keyPEM, err := os.ReadFile(filepath.Join(cfg.TLSCertsDir, base+".key"))
-			if err != nil {
-				return fmt.Errorf("certificate %s has no matching key: %w", crt, err)
-			}
-			host := strings.Replace(base, "_wildcard", "*", 1)
-			if err := m.RegisterPEM(host, "", certPEM, keyPEM); err != nil {
-				return fmt.Errorf("certificate %s: %w", crt, err)
-			}
-			hosts = append(hosts, host)
-		}
-	}
-	if cfg.TLSClientCAFile != "" {
-		caPEM, err := os.ReadFile(cfg.TLSClientCAFile)
-		if err != nil {
-			return fmt.Errorf("RELAYOPS_TLS_CLIENT_CA_FILE: %w", err)
-		}
-		if err := m.SetClientCAs(caPEM); err != nil {
-			return fmt.Errorf("RELAYOPS_TLS_CLIENT_CA_FILE: %w", err)
-		}
-		mode := tls.VerifyClientCertIfGiven
-		if cfg.TLSClientAuth == "require" {
-			mode = tls.RequireAndVerifyClientCert
-		}
-		m.SetClientAuth(mode)
-	}
-	srv.TLSConfig = m.TLSConfig()
-	slog.Info("gateway TLS configured", "default_certificate", def != nil, "sni_hosts", hosts,
-		"client_ca", cfg.TLSClientCAFile != "", "client_auth", cfg.TLSClientAuth)
-	return nil
-}
-
-// listen serves srv, with TLS when it has a TLS configuration or both
-// certificate files are set, and reports any failure other than a graceful
-// shutdown on errc.
-func listen(srv *http.Server, name, certFile, keyFile string, errc chan<- error) {
-	var err error
-	if srv.TLSConfig != nil && srv.TLSConfig.GetCertificate != nil {
-		slog.Info("starting "+name+" listener with TLS (SNI)", "addr", srv.Addr)
-		err = srv.ListenAndServeTLS("", "")
-	} else if certFile != "" && keyFile != "" {
-		slog.Info("starting "+name+" listener with TLS", "addr", srv.Addr)
-		err = srv.ListenAndServeTLS(certFile, keyFile)
-	} else {
-		err = srv.ListenAndServe()
-	}
-	if err != nil && !errors.Is(err, http.ErrServerClosed) {
-		errc <- err
 	}
 }

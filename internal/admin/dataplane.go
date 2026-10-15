@@ -40,6 +40,9 @@ const (
 	dpMaxLogBody      = 32 << 20 // compressed request body
 	dpMaxLogDecoded   = 128 << 20
 	dpMaxSmallRequest = 64 << 10
+	// An acknowledgement may carry a certificate report; nodes keep it under
+	// 48 KiB (the previous release accepted 64 KiB), this leaves headroom.
+	dpMaxAckRequest = 256 << 10
 )
 
 // DataplaneOptions configures the node API for gateway-only nodes.
@@ -360,7 +363,7 @@ func sortSubs(subs []store.SubRecord) {
 
 func (s *Server) dpAck(w http.ResponseWriter, r *http.Request) {
 	var ack gateway.NodeAck
-	if !decodeDP(w, r, dpMaxSmallRequest, &ack) {
+	if !decodeDP(w, r, dpMaxAckRequest, &ack) {
 		return
 	}
 	if ack.NodeID == "" || ack.Revision <= 0 {
@@ -376,6 +379,12 @@ func (s *Server) dpAck(w http.ResponseWriter, r *http.Request) {
 	}
 	err := s.store.AcknowledgeRevisionWithCanary(r.Context(), ack.NodeID, ack.Revision, ack.CanaryRevision,
 		ack.Routes, ack.Keys, ack.TookMS, ack.NodeGroup, ack.IsCanary)
+	if err == nil && ack.CertificatesIncluded {
+		// Best effort: a failed report must never cost the node its liveness.
+		if cerr := s.store.RecordNodeCertificates(r.Context(), ack.NodeID, ack.Certificates); cerr != nil {
+			slog.Warn("certificate report not recorded", "node", ack.NodeID, "err", cerr)
+		}
+	}
 	s.noContent(w, err)
 }
 

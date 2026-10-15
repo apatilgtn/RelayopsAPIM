@@ -1616,13 +1616,56 @@
     </section>`;
   }
 
+  // Certificates every node holds (listener, client CA, ACME, upstream TLS),
+  // soonest expiry first. Metadata only: keys never leave the nodes.
+  const certSourceLabel = {
+    listener: 'Listener (default)', listener_host: 'Listener (SNI)', client_ca: 'Client CA', acme: 'ACME',
+    upstream_ca: 'Upstream CA', upstream_client: 'Upstream client', dataplane_client: 'Node → control plane'
+  };
+  const renderCertificates = (rep) => {
+    const list = rep.certificates || [];
+    const sum = rep.summary || {};
+    const left = (c) => {
+      const days = Math.floor((new Date(c.not_after).getTime() - Date.now()) / 86400000);
+      if (days < 0) return '<span class="tag error">Expired</span>';
+      const tag = c.severity === 'critical' ? 'error' : c.severity === 'warning' ? 'warn' : c.severity === 'info' ? 'blue' : 'success';
+      return `<span class="tag ${tag}">${days} days</span>`;
+    };
+    const where = (c) => c.source === 'upstream_ca' || c.source === 'upstream_client' ? `API ${esc(c.name)}` : `${esc(c.listener || '')} ${esc(c.name)}`;
+    return `
+      <div class="card" style="margin-top:20px">
+        <div class="card-header">
+          <h2>Certificates</h2>
+          <div class="muted small">${fmtNum(sum.total || 0)} total · ${fmtNum(sum.expired || 0)} expired · ${fmtNum(sum.expiring_14d || 0)} within 14 days · ${fmtNum(sum.expiring_30d || 0)} within 30 days</div>
+        </div>
+        ${rep.warning ? `<p class="muted small" style="padding:0 16px">${esc(rep.warning)}</p>` : ''}
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Used as</th><th>Where</th><th>Subject</th><th>Issuer</th><th>Expires</th><th>Nodes</th></tr></thead>
+            <tbody>
+              ${list.map((c) => `
+                <tr>
+                  <td><span class="tag gray">${esc(certSourceLabel[c.source] || c.source)}</span></td>
+                  <td>${where(c)}</td>
+                  <td class="mono small" title="SHA-256 ${esc(c.fingerprint_sha256)}">${esc(c.subject)}</td>
+                  <td class="muted small">${esc(c.issuer)}</td>
+                  <td title="${esc(fmtDate(c.not_after))}">${left(c)}</td>
+                  <td class="muted small">${esc((c.nodes || []).join(', '))}</td>
+                </tr>`).join('') || '<tr><td colspan="6" class="empty">No certificates reported. Nodes without TLS listeners or upstream TLS hold none.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+  };
+
   views.fleet = async () => {
-    const [fleet, revs, autoRollback, runtime, nodeCreds] = await Promise.all([
+    const [fleet, revs, autoRollback, runtime, nodeCreds, certReport] = await Promise.all([
       api('GET', '/api/fleet/status'),
       api('GET', '/api/revisions'),
       api('GET', '/api/revisions/auto-rollback/config').catch(() => null),
       api('GET', '/api/system/runtime').catch(() => null),
-      api('GET', '/api/admin/dataplane/credentials').catch(() => null) // superadmins only
+      api('GET', '/api/admin/dataplane/credentials').catch(() => null), // superadmins only
+      api('GET', '/api/system/certificates').catch(() => null) // platform administrators only
     ]);
     // Nodes re-acknowledge every 30s; no report for 90s means the node is gone or cut off.
     const heartbeatAge = (n) => Math.max(0, Math.round((Date.now() - new Date(n.applied_at).getTime()) / 1000));
@@ -1734,6 +1777,8 @@
           </table>
         </div>
       </div>
+
+      ${certReport ? renderCertificates(certReport) : ''}
 
       ${runtime ? `
       <div class="grid two" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top:20px">

@@ -53,6 +53,7 @@ func StatusHandler(gw *gateway.Gateway, src *RemoteSource) http.Handler {
 			c.WritePrometheusMetrics(w)
 		}
 		gw.WriteUpstreamMetrics(w)
+		gw.CertificateInventory().WriteMetrics(w)
 	})
 	return mux
 }

@@ -236,6 +236,13 @@ func (s *Server) detectSignals(ctx context.Context, r *http.Request) []Signal {
 		}
 	}
 
+	// Certificates that expired or expire soon (platform administrators only:
+	// the report is platform-wide).
+	var certRep certificateReport
+	if s.fetchAs(ctx, r, "/api/system/certificates", &certRep) {
+		out = append(out, certificateSignals(certRep)...)
+	}
+
 	rank := map[string]int{"critical": 0, "warning": 1, "info": 2}
 	sort.SliceStable(out, func(i, j int) bool { return rank[out[i].Severity] < rank[out[j].Severity] })
 	if out == nil {

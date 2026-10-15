@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/subtle"
+	"crypto/tls"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
@@ -29,6 +30,7 @@ import (
 
 	"github.com/relayops/apim/internal/ai"
 	"github.com/relayops/apim/internal/analytics"
+	"github.com/relayops/apim/internal/certs"
 	"github.com/relayops/apim/internal/config"
 	"github.com/relayops/apim/internal/graphql"
 	"github.com/relayops/apim/internal/grpc"
@@ -67,6 +69,9 @@ type Gateway struct {
 
 	tmu        sync.Mutex
 	transports map[transportKey]*http.Transport
+
+	certs             *certs.Inventory // certificates this node holds, for reports and metrics
+	upstreamTLSErrors sync.Map         // API id -> *atomic.Int64 requests refused for upstream TLS
 }
 
 type AIBudgetLedger interface {
@@ -140,7 +145,10 @@ func New(c *analytics.Collector, rl *RedisLimiter, nodeID string) *Gateway {
 		transports:   map[transportKey]*http.Transport{},
 		upstreams:    newUpstreamRegistry(),
 		tracer:       &tracing.Tracer{},
+		certs:        certs.NewInventory(),
 	}
+	g.certs.Register(g.upstreamTLSStatuses)
+	g.certs.RegisterMetrics(g.writeUpstreamTLSMetrics)
 	g.proxy = &httputil.ReverseProxy{
 		Rewrite:        g.rewrite,
 		Transport:      routeTransport{g},
@@ -230,7 +238,7 @@ func (g *Gateway) Snapshot() *Snapshot { return g.snap.Load() }
 
 func (g *Gateway) swap(s *Snapshot) {
 	g.snap.Store(s)
-	keep := map[string]bool{}
+	keep, keepTLS := map[string]bool{}, map[string]bool{}
 	for _, snap := range []*Snapshot{s, s.Canary} {
 		if snap == nil {
 			continue
@@ -239,9 +247,14 @@ func (g *Gateway) swap(s *Snapshot) {
 			for _, t := range r.Pool.targets {
 				keep[t.key] = true
 			}
+			if u := r.Pool.tls; u != nil && u.err == nil {
+				keepTLS[u.key] = true
+			}
 		}
 	}
 	g.upstreams.retain(keep)
+	g.upstreams.retainTLS(keepTLS)
+	g.pruneTransports(keepTLS)
 }
 
 // ---------------------------------------------------------------------------
@@ -901,6 +914,8 @@ func (g *Gateway) proxyError(w http.ResponseWriter, r *http.Request, err error) 
 		status, code = 499, "client_closed_request"
 	case errors.Is(err, ErrCircuitOpen):
 		status, code = http.StatusServiceUnavailable, "upstream_circuit_open"
+	case errors.As(err, new(*upstreamTLSError)):
+		code = "upstream_tls_unavailable"
 	case errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &ne) && ne.Timeout()):
 		status, code = http.StatusGatewayTimeout, "upstream_timeout"
 	}
@@ -991,7 +1006,13 @@ func (t routeTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		return g.transportFor(30000).RoundTrip(req)
 	}
 	pool := st.route.Pool
-	base := g.transportFor(st.route.API.TimeoutMS)
+	if u := pool.tls; u != nil && u.err != nil {
+		// Fail closed: never call the upstream with weaker trust than configured.
+		g.countUpstreamTLSError(pool.apiID)
+		st.upstreamAttempts = append(st.upstreamAttempts, map[string]any{"attempt": 1, "error": u.err.Error()})
+		return nil, u.err
+	}
+	base := g.tlsTransport(st.route.API.TimeoutMS, pool.tls)
 
 	attempts := 1
 	rp := pool.retryPolicy()
@@ -1165,18 +1186,21 @@ func targetURL(target, in *url.URL, rawQuery string) *url.URL {
 // transportKey selects a shared upstream transport.
 type transportKey struct {
 	timeoutMS int
-	h2c       bool // cleartext HTTP/2 with prior knowledge (gRPC over plain TCP)
+	h2c       bool   // cleartext HTTP/2 with prior knowledge (gRPC over plain TCP)
+	tls       string // upstream TLS configuration digest ("" for the system roots)
 }
 
 func (g *Gateway) transportFor(timeoutMS int) *http.Transport {
-	return g.transport(transportKey{timeoutMS: timeoutMS})
+	return g.transport(transportKey{timeoutMS: timeoutMS}, nil)
 }
 
 func (g *Gateway) h2cTransportFor(timeoutMS int) *http.Transport {
-	return g.transport(transportKey{timeoutMS: timeoutMS, h2c: true})
+	return g.transport(transportKey{timeoutMS: timeoutMS, h2c: true}, nil)
 }
 
-func (g *Gateway) transport(key transportKey) *http.Transport {
+// transport returns the shared transport for key, creating it with tlsCfg
+// (which must match key.tls) on first use.
+func (g *Gateway) transport(key transportKey, tlsCfg *tls.Config) *http.Transport {
 	timeoutMS := key.timeoutMS
 	g.tmu.Lock()
 	defer g.tmu.Unlock()
@@ -1192,6 +1216,9 @@ func (g *Gateway) transport(key transportKey) *http.Transport {
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: time.Second,
 		ResponseHeaderTimeout: time.Duration(timeoutMS) * time.Millisecond,
+	}
+	if tlsCfg != nil {
+		t.TLSClientConfig = tlsCfg.Clone()
 	}
 	if key.h2c {
 		p := new(http.Protocols)

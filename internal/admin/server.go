@@ -317,6 +317,7 @@ func (s *Server) Handler() http.Handler {
 	api.HandleFunc("POST /api/system/apply", s.applyDeclarativeConfig)
 	api.HandleFunc("POST /api/system/plan", s.planDeclarativeConfig)
 	api.HandleFunc("GET /api/system/drift", s.getConfigDrift)
+	api.HandleFunc("GET /api/system/certificates", s.listCertificates)
 	api.HandleFunc("POST /api/system/maintenance/purge", s.purgeMaintenance)
 
 	// Tenants and onboarding

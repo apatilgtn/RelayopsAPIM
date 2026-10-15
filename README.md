@@ -112,6 +112,7 @@ Measured locally (5 October 2026 soak, 300 req/s with continuous publish/canary/
 | **Security** | API keys (SHA-256 at rest, shown once, rotation with grace periods), subscriptions with approval workflows, JWT HS256 (`exp` required, `nbf` honoured), OIDC via JWKS (fails closed), CORS, credentials stripped before forwarding, admin RBAC, OIDC SSO for admins, and a full audit log with before and after state. |
 | **Observability** | Every request logged with its decision trail (auth, subscription, rate limit, upstream attempts, cohort). Request diagnosis by ID or trace ID, Prometheus metrics, and OpenTelemetry traces (OTLP/HTTP) with W3C trace context. |
 | **Protocols** | HTTP/1.1, HTTP/2 and cleartext HTTP/2 (h2c) upstreams, SSE and streaming (immediate flush), WebSocket upgrades (GraphQL operations inspected), gRPC and gRPC-Web, MCP. AI routes record model and token usage. |
+| **Certificates** | SNI certificates per hostname, client mTLS with a CA per hostname and CRL checks, ACME (Let's Encrypt) issuance and renewal, hot reload of every certificate file without a restart, upstream TLS per API (private CA, client certificate, server name, TLS 1.3), and expiry tracking across the fleet with metrics, an Orbit signal and webhook alerts ([guide](docs/CERTIFICATE_MANAGEMENT.md)). |
 | **Operations** | Hot reload in milliseconds, fleet convergence tracking, last-known-good config cache for database outages, Helm chart, and a distroless non-root image. |
 
 ## Quick start (Local Source Build)
@@ -267,12 +268,37 @@ A target can carry its own `request_headers`, which replace the API's headers of
 - **Targets sharing a URL** need different `name`s; each keeps its own health and circuit state, and metrics carry a `target_name` label.
 - **Retry statuses.** `429` is always allowed in `retry_on_status`. `401` and `403` are allowed only when targets have their own `request_headers`, since only then can another attempt succeed.
 
+### Upstream TLS
+
+An API can trust a private CA, present a client certificate (mutual TLS), set the server name and require TLS 1.3 when it connects to `https` and `grpcs` targets:
+
+```json
+"traffic_policy": {
+  "upstream_tls": {
+    "ca": "${secret:BILLING_CA}",
+    "client_certificate": "${secret:BILLING_CLIENT_CERT}",
+    "client_key": "${secret:BILLING_CLIENT_KEY}",
+    "server_name": "billing.internal",
+    "min_version": "1.3"
+  }
+}
+```
+
+- **Secret references only.** Certificates and keys must be secret references, so they never reach the database, revisions or exports.
+- **Resolved on each gateway.** Values come from `RELAYOPS_SECRET_<NAME>_FILE` (a file path, re-read at every configuration reload, so a renewed certificate is used without a restart), `RELAYOPS_SECRET_<NAME>` or `<NAME>`.
+- **No downgrade.** There is no option to skip verification.
+- **Fail closed.** If a secret is missing or does not parse, the API's requests get `502 upstream_tls_unavailable`, counted in `relayops_upstream_tls_errors_total`.
+- **Per revision.** A canary that changes `upstream_tls` affects only the canary cohort.
+- **Health checks** use the same settings.
+
 ## Observability
 
 - **Prometheus** (`GET :9090/metrics`):
   - `relayops_requests_total{status}` and `relayops_request_duration_seconds_bucket|sum|count`.
   - `relayops_config_revision`, `relayops_canary_revision`, `relayops_fleet_converged` and `relayops_fleet_nodes_count`.
   - `relayops_upstream_target_healthy`, `relayops_upstream_circuit_open` and `relayops_upstream_{requests,failures,retries,circuit_opens}_total{api_id,target,target_name}`.
+  - `relayops_tls_certificate_not_after_timestamp_seconds{source,listener,name,api_id,role,serial}` for every certificate the node holds: listeners, client CAs, ACME, upstream TLS and the node's control-plane certificate. Also `relayops_tls_reloads_total{listener,result}`, `relayops_tls_crl_stale` and `relayops_tls_revoked_refusals_total`.
+- **Certificates.** `GET /api/system/certificates` (platform administrators) lists the certificates of every node and when they expire. Releases & fleet shows the same list. Orbit raises a signal for any certificate that has expired or expires within 30 days. Certificates within 14 days of expiry, or expired, are alerted to `RELAYOPS_ALERT_WEBHOOK_URL` once a day. Reports carry metadata only, never keys.
   - Orbit AI, when configured:
     - `relayops_orbit_questions_total{outcome}`
     - `relayops_orbit_tokens_total{model,kind}`
@@ -361,9 +387,12 @@ Without a model, the console still shows Orbit with setup instructions, and `POS
 | `RELAYOPS_DATAPLANE_TOKEN` | (unset) | Shared node API token, at least 32 characters. Setting it on a control plane enables `/dataplane/v1/*`; gateway-only nodes require it |
 | `RELAYOPS_CONTROL_PLANE_URL` | | Gateway-only nodes: control plane base URL. Must be `https://` unless `RELAYOPS_DATAPLANE_ALLOW_HTTP=true` |
 | `RELAYOPS_STATUS_ADDR` | `:9091` | Gateway-only nodes: `/metrics`, `/healthz`, `/readyz` listener |
-| `RELAYOPS_TLS_CERTS_DIR` | (unset) | Per-hostname gateway certificates chosen by SNI: `<host>.crt` + `<host>.key`, `_wildcard.example.com.crt` for `*.example.com`. `RELAYOPS_TLS_CERT_FILE` is the fallback |
+| `RELAYOPS_TLS_CERTS_DIR` | (unset) | Per-hostname gateway certificates chosen by SNI: `<host>.crt` + `<host>.key`, `_wildcard.example.com.crt` for `*.example.com`. `RELAYOPS_TLS_CERT_FILE` is the fallback. `<host>.client-ca.pem` sets the client CA for that hostname, replacing `RELAYOPS_TLS_CLIENT_CA_FILE` there |
 | `RELAYOPS_TLS_CLIENT_CA_FILE` / `RELAYOPS_TLS_CLIENT_AUTH` | (unset) / `optional` | Verify client certificates on the gateway listener (`optional` or `require`), for `auth_type: mtls` APIs |
 | `RELAYOPS_TRUSTED_PROXY_CIDRS` | (unset) | Ingresses whose forwarded client-certificate headers (`X-SSL-Client-*`) are accepted. Client-sent certificate headers are always discarded otherwise |
+| `RELAYOPS_TLS_CLIENT_CRL_FILE` | (unset) | Revocation lists (PEM or DER) that gateway client certificates are checked against. A list is used only if the issuing CA signed it. Stale lists are still enforced |
+| `RELAYOPS_TLS_RELOAD_SECONDS` | `30` | How often certificate, key, CA and CRL files are re-read. Changes apply to new connections without a restart, and a bad file keeps the current certificates. `0` disables polling; `SIGHUP` always reloads |
+| `RELAYOPS_ACME_DOMAINS` | (unset) | Hostnames the gateway gets certificates for with ACME (Let's Encrypt by default). Needs `RELAYOPS_ACME_ACCEPT_TOS=true`. Optional: `RELAYOPS_ACME_EMAIL`, `RELAYOPS_ACME_DIRECTORY_URL`, `RELAYOPS_ACME_HTTP_ADDR` (HTTP-01, e.g. `:80`), `RELAYOPS_ACME_CACHE_DIR`, and `RELAYOPS_ACME_CACHE_KEY` (a base64 32-byte key that shares an encrypted cache through Postgres). See [certificate management](docs/CERTIFICATE_MANAGEMENT.md) |
 | `RELAYOPS_ALERT_WEBHOOK_URL` | (unset) | Webhook (Slack/Teams compatible) for alerts such as MCP tools or prompts held for review |
 | `RELAYOPS_WASM_PLUGINS_DIR` | (unset) | `*.wasm` policy plugins; an API lists them in `traffic_policy.wasm_plugins` and they run after auth and rate limits. A missing plugin refuses the API's requests (503) |
 | `RELAYOPS_AUTO_ROLLBACK_INTERVAL_SECONDS` | `3` | How often the auto-rollback supervisor evaluates. Each run is about 2 KB of database reads; use 15 on metered hosted databases (see [docs/AWS_SUPABASE_DEPLOYMENT.md](docs/AWS_SUPABASE_DEPLOYMENT.md#database-egress)) |
@@ -461,7 +490,7 @@ deploy/helm/         Helm chart;  examples/gitops/  sample document and workflow
 
 ## Roadmap
 
-SCIM provisioning · tenant-filtered live stream and dashboard tenant switcher · per-tenant gateway hostnames · gRPC and GraphQL routing · mTLS to upstreams and clients · request/response transformation · response caching · AI gateway policies (multi-provider routing, prompt guards) and an MCP tool gateway · Kubernetes operator and Terraform provider.
+Tenant-filtered live stream and dashboard tenant switcher · per-tenant gateway hostnames and managed certificates (API, console page, on-demand ACME after a DNS check) · OCSP · request/response transformation · response caching · AI gateway multi-provider routing on the request path and prompt guards · Kubernetes operator and Terraform provider.
 
 ## License
 

@@ -147,6 +147,7 @@ func (s *Server) prometheusMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.gw != nil {
 		s.gw.WriteUpstreamMetrics(w)
+		s.gw.CertificateInventory().WriteMetrics(w)
 	}
 	if fleet.CanaryRevision > 0 {
 		fmt.Fprintf(w, "# HELP relayops_canary_revision In-flight canary revision (0 when none)\n")
