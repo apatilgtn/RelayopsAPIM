@@ -1,0 +1,89 @@
+name: security
+
+# Tier-1 automated security scanning: Go vulnerabilities (govulncheck), Go SAST
+# (gosec), secret scanning (gitleaks) and dependency/IaC/misconfig scanning (Trivy).
+# govulncheck is enforced (it reports only vulnerabilities actually reachable in the
+# build, so it is low-noise). The others start report-only, publishing findings to the
+# repository Security tab; flip their `exit-code`/`-no-fail` to enforce once triaged.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "27 6 * * 1" # weekly: catch newly disclosed CVEs in unchanged code
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  govulncheck:
+    name: Go vulnerabilities (govulncheck)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - name: Scan reachable code for known Go vulnerabilities
+        run: govulncheck ./...
+
+  gosec:
+    name: Go SAST (gosec)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Run gosec
+        uses: securego/gosec@v2.21.4
+        with:
+          # -no-fail: report-only for now. Drop it to enforce once the baseline is clean.
+          args: "-no-fail -severity medium -fmt sarif -out gosec.sarif ./..."
+      - name: Upload gosec findings
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: gosec.sarif
+          category: gosec
+
+  gitleaks:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # scan full history, not just the tip
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+
+  trivy:
+    name: Dependencies, IaC & misconfig (Trivy)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trivy filesystem scan (deps, secrets, Terraform/Helm/Dockerfile misconfig)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          format: sarif
+          output: trivy.sarif
+          exit-code: "0" # report-only for now; set to "1" to enforce once triaged
+      - name: Upload Trivy findings
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy.sarif
+          category: trivy
