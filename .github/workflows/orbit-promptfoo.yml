@@ -1,0 +1,62 @@
+name: orbit-promptfoo
+
+# Tier-2 LLM red-team against the REAL model (manual). Runs Promptfoo prompt-
+# injection / secret-extraction probes through Orbit using the real NVIDIA model.
+#
+# Requires a repository secret NVIDIA_API_KEY. Not run on push (it spends model
+# budget). Trigger from the Actions tab when you want a real-model pass.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  promptfoo:
+    name: Orbit prompt-injection (real model)
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 2s --health-timeout 5s --health-retries 30
+    env:
+      RELAYOPS_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+      RELAYOPS_ADMIN_TOKEN: orbit-promptfoo-admin
+      RELAYOPS_ADMIN_ADDR: ":9090"
+      RELAYOPS_PROXY_ADDR: ":8080"
+      RELAYOPS_REDIS_URL: none
+      RELAYOPS_ORBIT_BASE_URL: https://integrate.api.nvidia.com/v1
+      RELAYOPS_ORBIT_MODEL: nvidia/nemotron-3-super-120b-a12b
+      RELAYOPS_ORBIT_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+      ORBIT_URL: http://127.0.0.1:9090/api/orbit/ask
+      ADMIN_TOKEN: orbit-promptfoo-admin
+    steps:
+      - name: Require the model key
+        run: |
+          if [ -z "${RELAYOPS_ORBIT_API_KEY}" ]; then
+            echo "::error::Add a repository secret named NVIDIA_API_KEY to run this real-model red-team."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Build and start RelayOps (Orbit -> real model)
+        run: |
+          go build -o bin/ ./cmd/relayops
+          ./bin/relayops &
+          for i in $(seq 1 40); do
+            curl -fsS -H "Authorization: Bearer orbit-promptfoo-admin" http://127.0.0.1:9090/healthz >/dev/null && exit 0
+            sleep 1
+          done
+          echo "control plane did not become ready"; exit 1
+      - name: Run Promptfoo
+        run: npx promptfoo@0.117.4 eval -c test/orbit/promptfooconfig.yaml --no-cache

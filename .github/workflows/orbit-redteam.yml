@@ -1,0 +1,78 @@
+name: orbit-redteam
+
+# Tier-2 LLM red-team (mock model): proves the Orbit guardrails RelayOps owns
+# with no real model and no cost -- secret redaction, snapshot role-scoping, and
+# proposal-token integrity. A separate manually-triggered workflow runs Promptfoo
+# against the real model for jailbreak/prompt-injection coverage.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "internal/admin/orbit*.go"
+      - "internal/orbit/**"
+      - "test/orbit/**"
+      - ".github/workflows/orbit-redteam.yml"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  guardrails:
+    name: Orbit guardrails (mock model)
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 2s --health-timeout 5s --health-retries 30
+    env:
+      RELAYOPS_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+      RELAYOPS_ADMIN_TOKEN: orbit-redteam-admin
+      RELAYOPS_ADMIN_ADDR: ":9090"
+      RELAYOPS_PROXY_ADDR: ":8080"
+      RELAYOPS_REDIS_URL: none
+      RELAYOPS_ORBIT_BASE_URL: http://127.0.0.1:7071/v1
+      RELAYOPS_ORBIT_MODEL: mock
+      RELAYOPS_ORBIT_API_KEY: mock
+      MODEL_LOG: /tmp/orbit-model-requests.log
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build binaries
+        run: go build -o bin/ ./cmd/relayops ./cmd/mockupstream
+
+      - name: Start mock upstream and recording mock model
+        run: |
+          ./bin/mockupstream -addr :7070 -jitter-ms 0 &
+          python3 test/orbit/mock_model.py &
+          for i in $(seq 1 20); do
+            curl -fsS http://127.0.0.1:7071/v1/models >/dev/null 2>&1 && break
+            sleep 1
+          done
+
+      - name: Start RelayOps (Orbit -> mock model) and wait for readiness
+        run: |
+          ./bin/relayops &
+          for i in $(seq 1 40); do
+            if curl -fsS -H "Authorization: Bearer orbit-redteam-admin" http://127.0.0.1:9090/healthz >/dev/null; then
+              echo ready; exit 0
+            fi
+            sleep 1
+          done
+          echo "control plane did not become ready"; exit 1
+
+      - name: Confirm Orbit is configured
+        run: |
+          curl -fsS -H "Authorization: Bearer orbit-redteam-admin" http://127.0.0.1:9090/api/orbit/status
+
+      - name: Run Orbit guardrail red-team
+        run: python3 test/orbit/redteam.py
