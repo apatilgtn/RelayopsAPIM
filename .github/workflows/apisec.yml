@@ -1,0 +1,75 @@
+name: apisec
+
+# Tier-2 API security: property-based fuzzing of the gateway proxy path with
+# Schemathesis. It derives valid and malformed requests from an OpenAPI spec and
+# sends them through the gateway to a mock upstream, asserting the gateway never
+# returns a server error (5xx) or crashes under hostile input.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "internal/gateway/**"
+      - "test/apisec/**"
+      - ".github/workflows/apisec.yml"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  schemathesis:
+    name: Gateway fuzzing (Schemathesis)
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 2s --health-timeout 5s --health-retries 30
+    env:
+      RELAYOPS_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+      RELAYOPS_ADMIN_TOKEN: apisec-admin
+      RELAYOPS_ADMIN_ADDR: ":9090"
+      RELAYOPS_PROXY_ADDR: ":8080"
+      RELAYOPS_REDIS_URL: none
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build binaries
+        run: go build -o bin/ ./cmd/relayops ./cmd/mockupstream
+
+      - name: Start mock upstream and RelayOps
+        run: |
+          ./bin/mockupstream -addr :7070 -jitter-ms 0 &
+          ./bin/relayops &
+          for i in $(seq 1 40); do
+            curl -fsS -H "Authorization: Bearer apisec-admin" http://127.0.0.1:9090/healthz >/dev/null && break
+            sleep 1
+          done
+
+      - name: Configure a fuzz API (/apitest -> mock upstream)
+        run: |
+          curl -fsS -X POST http://127.0.0.1:9090/api/apis \
+            -H "Authorization: Bearer apisec-admin" -H "Content-Type: application/json" \
+            -d '{"name":"apitest","base_path":"/apitest","upstream_url":"http://127.0.0.1:7070","strip_path":true,"auth_type":"none","enabled":true,"visibility":"public","timeout_ms":3000}'
+          sleep 2
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/apitest/)
+          echo "smoke /apitest/ -> $code"; test "$code" = "200"
+
+      - name: Install Schemathesis
+        run: pipx install schemathesis==3.39.16 || pip install schemathesis==3.39.16
+
+      - name: Fuzz the gateway (assert no 5xx)
+        run: |
+          schemathesis run test/apisec/openapi.yaml \
+            --base-url http://127.0.0.1:8080/apitest \
+            --checks not_a_server_error \
+            --hypothesis-max-examples 40 \
+            --hypothesis-seed 0

@@ -1,0 +1,41 @@
+openapi: 3.0.3
+info:
+  title: RelayOps gateway fuzz target
+  version: "1.0.0"
+  description: >
+    Minimal spec for property-based fuzzing of the RelayOps gateway proxy path.
+    Backed by the mock upstream; Schemathesis derives valid and malformed
+    requests from this spec and sends them through the gateway, asserting the
+    gateway never returns a 5xx (not_a_server_error).
+paths:
+  /:
+    get:
+      summary: Echo (GET)
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        "200": { description: ok }
+    post:
+      summary: Echo (POST body)
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200": { description: ok }
+  /delay/{ms}:
+    get:
+      summary: Upstream with bounded delay
+      parameters:
+        - name: ms
+          in: path
+          required: true
+          schema: { type: integer, minimum: 0, maximum: 500 }
+      responses:
+        "200": { description: ok }
