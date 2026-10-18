@@ -1,0 +1,96 @@
+name: load
+
+# Tier-2 performance benchmark: drive real traffic through the gateway to a mock
+# upstream and record throughput, latency percentiles and error rate with k6.
+# Manual + weekly (a load test is too heavy for every push).
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "40 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  k6:
+    name: Gateway load & latency (k6)
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 2s --health-timeout 5s --health-retries 30
+    env:
+      RELAYOPS_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+      RELAYOPS_ADMIN_TOKEN: load-admin
+      RELAYOPS_ADMIN_ADDR: ":9090"
+      RELAYOPS_PROXY_ADDR: ":8080"
+      RELAYOPS_REDIS_URL: none
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build binaries
+        run: go build -o bin/ ./cmd/relayops ./cmd/relayopsctl ./cmd/mockupstream
+
+      - name: Start mock upstream (no artificial latency)
+        run: |
+          ./bin/mockupstream -addr :7070 -jitter-ms 0 &
+          echo $! > /tmp/mock.pid
+
+      - name: Start RelayOps and wait for readiness
+        run: |
+          ./bin/relayops &
+          echo $! > /tmp/relayops.pid
+          for i in $(seq 1 40); do
+            if curl -fsS -H "Authorization: Bearer load-admin" http://127.0.0.1:9090/healthz >/dev/null; then
+              echo "ready"; exit 0
+            fi
+            sleep 1
+          done
+          echo "control plane did not become ready"; exit 1
+
+      - name: Configure a benchmark API (/bench -> mock upstream)
+        run: |
+          curl -fsS -X POST http://127.0.0.1:9090/api/apis \
+            -H "Authorization: Bearer load-admin" -H "Content-Type: application/json" \
+            -d '{"name":"bench","base_path":"/bench","upstream_url":"http://127.0.0.1:7070","strip_path":true,"auth_type":"none","enabled":true,"visibility":"public","timeout_ms":3000}'
+          # Give the gateway a moment to pick up the new route.
+          sleep 2
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/bench/status/200)
+          echo "smoke check /bench/status/200 -> $code"
+          test "$code" = "200"
+
+      - name: Install k6
+        uses: grafana/setup-k6-action@v1.1.0
+
+      - name: Run k6 benchmark
+        run: k6 run --summary-export=artifacts/k6-summary.json test/load/gateway.js
+
+      - name: Headline numbers
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json
+          m = json.load(open("artifacts/k6-summary.json"))["metrics"]
+          dur = m["http_req_duration"]; reqs = m["http_reqs"]; failed = m["http_req_failed"]
+          print("=== RelayOps gateway benchmark ===")
+          print(f"Requests/sec : {reqs.get('rate',0):.0f}")
+          print(f"Total requests: {reqs.get('count',0):.0f}")
+          print(f"Latency p50  : {dur.get('med',0):.1f} ms")
+          print(f"Latency p95  : {dur.get('p(95)',0):.1f} ms")
+          print(f"Latency p99  : {dur.get('p(99)',0):.1f} ms")
+          print(f"Error rate   : {failed.get('rate',0)*100:.2f} %")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: k6-summary
+          path: artifacts/k6-summary.json
