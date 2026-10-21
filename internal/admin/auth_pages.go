@@ -62,7 +62,7 @@ func (s *Server) authSignup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if errors.Is(lookupErr, store.ErrNotFound) {
-		user, err := s.store.CreateAdminUser(r.Context(), store.AdminUser{Name: in.Name, Email: in.Email, Team: in.Team, PasswordHash: string(hash), Role: "auditor", Active: false, SSOProvider: "local"})
+		user, err := s.store.CreateAccessRequest(r.Context(), store.AdminUser{Name: in.Name, Email: in.Email, Team: in.Team, PasswordHash: string(hash), Role: "auditor", SSOProvider: "local"})
 		if err != nil && !errors.Is(err, store.ErrConflict) {
 			s.fail(w, err)
 			return

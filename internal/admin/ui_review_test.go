@@ -58,12 +58,7 @@ func TestUIReviewServer(t *testing.T) {
 			}
 		}
 	}
-	requester, err := full.CreateAdminUser(ctx, store.AdminUser{Name: "Access requester", Email: "requester@example.test", Team: "Integrations", Role: "auditor", Active: false, SSOProvider: "local", PasswordHash: ""})
-	if err != nil {
-		t.Fatal(err)
-	}
-	requester.Active = false
-	_, err = full.UpdateAdminUser(ctx, requester)
+	_, err = full.CreateAccessRequest(ctx, store.AdminUser{Name: "Access requester", Email: "requester@example.test", Team: "Integrations", Role: "auditor", SSOProvider: "local", PasswordHash: ""})
 	if err != nil {
 		t.Fatal(err)
 	}
