@@ -830,7 +830,20 @@ func (s *Store) GetAdminUserByEmail(ctx context.Context, email string) (AdminUse
 	return scanAdminUser(s.Pool.QueryRow(ctx, `SELECT `+adminUserCols+` FROM admin_users WHERE LOWER(email)=LOWER($1)`, email))
 }
 
+// CreateAdminUser creates an active account.
 func (s *Store) CreateAdminUser(ctx context.Context, u AdminUser) (AdminUser, error) {
+	u.Active = true
+	return s.insertAdminUser(ctx, u)
+}
+
+// CreateAccessRequest creates an inactive account awaiting approval by a
+// platform administrator; it cannot sign in until it is activated.
+func (s *Store) CreateAccessRequest(ctx context.Context, u AdminUser) (AdminUser, error) {
+	u.Active = false
+	return s.insertAdminUser(ctx, u)
+}
+
+func (s *Store) insertAdminUser(ctx context.Context, u AdminUser) (AdminUser, error) {
 	var id string
 	if u.Role == "" {
 		u.Role = "operator"
@@ -846,7 +859,6 @@ func (s *Store) CreateAdminUser(ctx context.Context, u AdminUser) (AdminUser, er
 	tokHash := HashKey(hex.EncodeToString(tokenEntropy[:]))
 	// No default password: an account without one cannot sign in with a password
 	// until one is set (SSO and cluster-token sign-in are unaffected).
-	u.Active = true
 	err := s.Pool.QueryRow(ctx, `INSERT INTO admin_users (email, name, role, password_hash, token_hash, sso_provider, sso_sub, team, active)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
 		u.Email, u.Name, u.Role, u.PasswordHash, tokHash, u.SSOProvider, u.SSOSub, u.Team, u.Active).Scan(&id)
